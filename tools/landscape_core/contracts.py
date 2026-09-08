@@ -174,8 +174,14 @@ def validate_source_registry(document):
             identifiers.add(item["id"])
         if not isinstance(item["kind"], str) or item["kind"] not in KINDS:
             errors.append("{}.kind is invalid".format(prefix))
-        if not isinstance(item["path"], str) or not Path(item["path"]).is_absolute():
-            errors.append("{}.path must be absolute".format(prefix))
+        if (
+            not isinstance(item["path"], str)
+            or not Path(item["path"]).is_absolute()
+            or ".." in Path(item["path"]).parts
+        ):
+            errors.append(
+                "{}.path must be absolute and contain no '..' component".format(prefix)
+            )
         elif item["path"] in paths:
             errors.append("{}.path is duplicated".format(prefix))
         if isinstance(item["path"], str):
@@ -193,6 +199,8 @@ def validate_source_registry(document):
         ):
             errors.append("{}.exclude must contain unique paths".format(prefix))
         else:
+            if exclusions != sorted(exclusions):
+                errors.append("{}.exclude must be sorted".format(prefix))
             for exclusion in exclusions:
                 if not _is_safe_relative_path(exclusion):
                     errors.append("{}.exclude contains an unsafe path".format(prefix))

@@ -1,5 +1,6 @@
 """Safety filters shared by deterministic detectors."""
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -36,6 +37,21 @@ SENSITIVE_SUFFIXES = (
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
 
+COPILOT_CONFIGURATION_DIRECTORIES = (
+    ".github/agents",
+    ".github/instructions",
+    ".github/skills",
+    ".claude/agents",
+    ".claude/skills",
+    ".agents/skills",
+)
+
+COPILOT_INSTRUCTION_NAMES = {
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+}
+
 
 def exclusion_reason(relative_path: Path, size: Optional[int] = None) -> Optional[str]:
     parts = relative_path.parts
@@ -55,13 +71,19 @@ def exclusion_reason(relative_path: Path, size: Optional[int] = None) -> Optiona
 
 
 def copilot_configuration_files(root: Path):
-    candidates = [
-        root / "AGENTS.md",
-        root / "CLAUDE.md",
-        root / ".github" / "copilot-instructions.md",
-    ]
-    for directory in (root / ".github" / "agents", root / ".github" / "skills"):
+    candidates = {root / ".github" / "copilot-instructions.md"}
+    for current, directory_names, file_names in os.walk(root, topdown=True):
+        directory_names[:] = sorted(
+            name for name in directory_names if name not in EXCLUDED_DIRECTORIES
+        )
+        current_path = Path(current)
+        candidates.update(
+            current_path / name
+            for name in file_names
+            if name in COPILOT_INSTRUCTION_NAMES
+        )
+    for relative in COPILOT_CONFIGURATION_DIRECTORIES:
+        directory = root / relative
         if directory.is_dir():
-            candidates.extend(path for path in directory.rglob("*") if path.is_file())
+            candidates.update(path for path in directory.rglob("*") if path.is_file())
     return sorted(path.relative_to(root).as_posix() for path in candidates if path.is_file())
-

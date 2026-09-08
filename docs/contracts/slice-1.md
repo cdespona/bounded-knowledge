@@ -107,6 +107,8 @@ Candidates remain outside `catalog/`. Validation does not authorize promotion.
 ./tools/landscape discover SOURCE --repository ID [--output PATH]
 ./tools/landscape validate INVENTORY [--source SOURCE]
 ./tools/landscape status SOURCE --inventory INVENTORY
+./tools/landscape sources validate REGISTRY
+./tools/landscape sources resolve ID --registry REGISTRY
 ```
 
 | Command outcome | Standard output | Standard error | Exit |
@@ -114,6 +116,7 @@ Candidates remain outside `catalog/`. Validation does not authorize promotion.
 | Help | Human-readable help | Empty | `0` |
 | Successful command | JSON, unless `discover --output` writes the artifact | Empty | `0` |
 | Dirty `preflight` | JSON result with `clean: false` | Empty | `2` |
+| Unapproved Copilot customization | Resolution JSON with approval false | Empty | `2` |
 | Invalid inventory | JSON result with `valid: false` | Empty | `1` |
 | Operational or malformed-input failure | Empty | One `error:` line | `1` |
 | Argument parsing failure | Empty | Usage and diagnostic | `2` |
@@ -129,8 +132,6 @@ not yet implemented. Changing them requires an explicit contract revision before
 workflow consumes the new surface.
 
 ```text
-./tools/landscape sources validate REGISTRY
-./tools/landscape sources resolve ID --registry REGISTRY
 ./tools/landscape evidence select INVENTORY --source SOURCE --output PATH
 ./tools/landscape candidate validate CANDIDATE --evidence BUNDLE
 ```

@@ -234,15 +234,18 @@ schemas/candidate-envelope.schema.json
 tools/landscape
 tools/landscape_core/
 tools/landscape_core/contracts.py
+tools/landscape_core/sources.py
 tools/detectors/git.py
 tools/detectors/generic_files.py
 tools/tests/test_landscape.py
 tools/tests/test_cli.py
 tools/tests/test_contracts.py
+tools/tests/test_sources.py
 examples/synthetic-java-service/
 examples/synthetic-kotlin-service/
 examples/contracts/
 docs/contracts/slice-1.md
+docs/contracts/slice-2.md
 work/.gitkeep
 workflows/.gitkeep
 ```
@@ -261,6 +264,11 @@ The deterministic tool currently supports:
 
 ./tools/landscape status /path/to/repository \
   --inventory work/application-id.json
+
+./tools/landscape sources validate sources.json
+
+./tools/landscape sources resolve application-id \
+  --registry sources.json
 ```
 
 The initial implementation deliberately uses Python 3.9 standard library only because
@@ -277,8 +285,8 @@ The actual test command is:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v
 ```
 
-Twenty-two tests pass: seven original foundation tests, six subprocess-level CLI
-acceptance tests, and nine persisted-contract tests.
+Thirty-one tests pass: seven original foundation tests, six subprocess-level CLI
+acceptance tests, nine persisted-contract tests, and nine source-resolution tests.
 
 The original foundation behaviours remain covered:
 
@@ -298,19 +306,20 @@ The CLI acceptance suite now protects the complete current command surface, incl
 - status returned `changed: false` for the same commit.
 - dirty-preflight, invalid-inventory, operational-error, and argument-error exit codes;
 - `discover` standard-output and `--output` destination behaviour.
+- source-registry validation and deterministic source resolution;
+- dirty, disabled, missing, nested, aliased, and symbolic-link source rejection;
+- repository-owned Copilot customization discovery, hashing, and approval blocking.
 
 ## Known limitations
 
 - Maven and Gradle files are recognized but not parsed.
 - Java and Kotlin files are classified but not semantically analyzed.
-- `sources.json` is currently an empty declarative registry; CLI commands receive explicit
-  paths.
+- `sources.json` is currently empty; no synthetic or private source path is registered by
+  default.
 - The observation inventory has an operational dependency-free validator. Claim and
   repository-profile schemas are not yet connected to a workflow.
 - No Conductor workflow has been created.
 - No private repository has been requested or analyzed.
-- The source-registry contract is defined, but its loader and approved-path resolver are
-  intentionally deferred to Slice 2.
 
 ## Recommended next milestone
 
@@ -385,10 +394,11 @@ to guess a field or exit-code meaning.
 
 ### Slice 2: source resolution
 
-Implement the registry loader and approved-path resolver against the Slice 1 contract.
-Fail closed for duplicate identifiers or resolved paths, disabled sources, missing or
-dirty repositories, non-root Git paths, symbolic-link or traversal escapes, invalid
-exclusions, and unapproved Copilot customizations.
+Implemented on 2026-09-08. The registry loader and approved-path resolver enforce the
+Slice 1 contract. They fail closed for duplicate identifiers or resolved paths, disabled
+sources, missing or dirty repositories, non-root Git paths, symbolic-link or traversal
+escapes, invalid exclusions, and unapproved Copilot customizations. Unapproved but
+otherwise safe customizations produce a reviewable resolution document with exit `2`.
 
 ### Slice 3: manifest extraction and evidence selection
 
@@ -441,9 +451,9 @@ against the current working tree. Preserve independent source-repository boundar
 keep all repository artifacts in English. Do not request or analyze private application
 repositories yet.
 
-Slice 1 is implemented. Review `docs/contracts/slice-1.md`, its schemas, validators,
-fixtures, and CLI acceptance tests. The next proposed milestone is Slice 2: implement the
-source-registry loader and approved-path resolver against the reviewed contract. Do not
-implement manifest parsers, evidence selection, Copilot execution, Conductor workflows,
-or promotion as part of that slice.
+Slices 1 and 2 are implemented. Review `docs/contracts/slice-1.md` and
+`docs/contracts/slice-2.md`, their schemas, validators, fixtures, and acceptance tests.
+The next proposed milestone is Slice 3: bounded Maven/Gradle manifest extraction and
+deterministic evidence selection. Do not implement Copilot execution, Conductor
+workflows, or promotion as part of that slice.
 ```

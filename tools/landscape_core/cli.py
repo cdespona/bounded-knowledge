@@ -6,8 +6,10 @@ from pathlib import Path
 import re
 import sys
 
+from .contracts import validate_source_registry
 from .discovery import discover, preflight
 from .git_repository import RepositoryError, commit_sha, require_repository_root
+from .sources import resolve_source
 from .validation import validate_inventory
 
 
@@ -48,6 +50,22 @@ def build_parser():
     status_parser = subparsers.add_parser("status", help="compare repository HEAD to inventory")
     status_parser.add_argument("source")
     status_parser.add_argument("--inventory", required=True)
+
+    sources_parser = subparsers.add_parser(
+        "sources", help="validate and resolve registered source repositories"
+    )
+    sources_subparsers = sources_parser.add_subparsers(
+        dest="sources_command", required=True
+    )
+    sources_validate_parser = sources_subparsers.add_parser(
+        "validate", help="validate a source registry"
+    )
+    sources_validate_parser.add_argument("registry")
+    sources_resolve_parser = sources_subparsers.add_parser(
+        "resolve", help="resolve an approved source repository"
+    )
+    sources_resolve_parser.add_argument("repository", type=_repository_id)
+    sources_resolve_parser.add_argument("--registry", required=True)
     return parser
 
 
@@ -85,8 +103,18 @@ def main(argv=None):
                 }
             )
             return 0
+
+        if args.command == "sources" and args.sources_command == "validate":
+            document = json.loads(Path(args.registry).read_text(encoding="utf-8"))
+            errors = validate_source_registry(document)
+            _write_json({"valid": not errors, "errors": errors})
+            return 0 if not errors else 1
+
+        if args.command == "sources" and args.sources_command == "resolve":
+            result = resolve_source(args.registry, args.repository)
+            _write_json(result)
+            return 0 if result["copilotAccessApproved"] else 2
     except (OSError, ValueError, RepositoryError, json.JSONDecodeError) as error:
         sys.stderr.write("error: {}\n".format(error))
         return 1
     return 1
-

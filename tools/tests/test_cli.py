@@ -49,7 +49,7 @@ class LandscapeCliTest(unittest.TestCase):
     def test_help_contract(self):
         result = self.run_cli("--help")
         self.assertEqual(0, result.returncode)
-        self.assertIn("{preflight,discover,validate,status}", result.stdout)
+        self.assertIn("{preflight,discover,validate,status,sources}", result.stdout)
         self.assertEqual("", result.stderr)
 
     def test_argument_failure_exit_contract(self):

@@ -38,6 +38,8 @@ dependencies.
 ./tools/landscape discover /path/to/repository --repository application-id --output work/application-id.json
 ./tools/landscape validate work/application-id.json --source /path/to/repository
 ./tools/landscape status /path/to/repository --inventory work/application-id.json
+./tools/landscape sources validate sources.json
+./tools/landscape sources resolve application-id --registry sources.json
 ```
 
 `preflight` requires an independent, clean Git repository. It reports Copilot
@@ -51,8 +53,13 @@ meaning.
 `status` compares the current Git commit with a prior inventory. An unchanged commit can
 be skipped without invoking Copilot.
 
-The local source registry is `sources.json`. Its loader and approved-path resolver are
-defined but intentionally not implemented in the first contract slice.
+The local source registry is `sources.json`. `sources validate` checks its persisted
+contract without accessing configured repositories. `sources resolve` verifies one
+enabled source as an independent, clean Git root and reports whether its repository-owned
+Copilot customizations match the approved digest.
+
+The full source-resolution and Copilot-approval rules are documented in
+`docs/contracts/slice-2.md`.
 
 ## Validation
 
