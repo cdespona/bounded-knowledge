@@ -1,0 +1,12 @@
+{
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "configuredPath": "/tmp/bounded-knowledge/synthetic-java-service",
+  "copilotAccessApproved": true,
+  "copilotConfigurationFiles": [],
+  "copilotConfigurationSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exclusions": ["docs/generated"],
+  "kind": "application",
+  "repository": "synthetic-java-service",
+  "resolvedPath": "/private/tmp/bounded-knowledge/synthetic-java-service",
+  "schemaVersion": 1
+}

@@ -1,0 +1,35 @@
+{
+  "analyzedCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "evidenceBundleId": "37e18ce2e918bb87f5f2dafe2f08925d80d43cac330f0e0d230be97e15af7e2b",
+  "kind": "application",
+  "proposedProfile": {
+    "analyzedCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "claims": [
+      {
+        "analyzedAt": "2026-09-08T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "lines": "5",
+            "observationId": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "path": "pom.xml",
+            "repository": "synthetic-java-service"
+          }
+        ],
+        "id": "declares-project-artifact",
+        "statement": "The Maven artifact is synthetic-java-service.",
+        "status": "confirmed"
+      }
+    ],
+    "kind": "application",
+    "openQuestions": [
+      "What business capability does this synthetic service represent?"
+    ],
+    "repository": "synthetic-java-service",
+    "schemaVersion": 1
+  },
+  "repository": "synthetic-java-service",
+  "schemaVersion": 1
+}

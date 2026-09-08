@@ -18,6 +18,7 @@ contracts are stable. No Conductor workflow is part of the first milestone.
 | Path | Purpose |
 | --- | --- |
 | `schemas/` | Persisted JSON contracts for sources, observations, claims, and profiles |
+| `docs/contracts/` | Reviewed producer-consumer and CLI contracts |
 | `tools/` | Deterministic discovery and validation commands |
 | `examples/` | Synthetic Java and Kotlin source fixtures used by tests |
 | `catalog/` | Approved application, platform, interface and terminology knowledge |
@@ -50,6 +51,9 @@ meaning.
 `status` compares the current Git commit with a prior inventory. An unchanged commit can
 be skipped without invoking Copilot.
 
+The local source registry is `sources.json`. Its loader and approved-path resolver are
+defined but intentionally not implemented in the first contract slice.
+
 ## Validation
 
 Run all deterministic tests:
@@ -61,6 +65,10 @@ python3 -m unittest discover -s tools/tests -v
 The tests create temporary Git repositories from the Java and Kotlin fixtures. They do
 not download dependencies or compile the synthetic applications.
 
+The suite also validates the contract fixtures in `examples/contracts/` and exercises
+the complete supported CLI surface through subprocesses. The Slice 1 contracts and exit
+codes are documented in `docs/contracts/slice-1.md`.
+
 ## Safety principles
 
 - Source repositories are read-only inputs.
@@ -70,4 +78,3 @@ not download dependencies or compile the synthetic applications.
 - Deterministic observations are not semantic claims.
 - Unsupported or invalid model output must fail closed.
 - No catalog mutation occurs without deterministic validation and human approval.
-

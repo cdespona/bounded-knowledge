@@ -1,0 +1,32 @@
+{
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "detectors": [
+    {
+      "name": "maven",
+      "version": 1
+    }
+  ],
+  "excluded": [],
+  "observations": [
+    {
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "detector": {
+        "name": "maven",
+        "version": 1
+      },
+      "id": "3be291b5b27d6e001a32925037de449d1cd23c993c0a4cf185f904d94cd485aa",
+      "kind": "build-project",
+      "repository": "synthetic-java-service",
+      "source": {
+        "lines": "6-3",
+        "path": "../pom.xml"
+      },
+      "value": {
+        "artifact": "tampered-artifact",
+        "buildSystem": "maven"
+      }
+    }
+  ],
+  "repository": "synthetic-java-service",
+  "schemaVersion": 1
+}

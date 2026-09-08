@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/manifest-observation.schema.json",
+  "title": "Parsed build-manifest observation contract",
+  "type": "object",
+  "required": ["kind", "source", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "build-project",
+        "declared-dependency",
+        "build-plugin",
+        "build-module",
+        "manifest-gap"
+      ]
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "value": {
+      "oneOf": [
+        { "$ref": "#/$defs/buildProject" },
+        { "$ref": "#/$defs/declaredDependency" },
+        { "$ref": "#/$defs/buildPlugin" },
+        { "$ref": "#/$defs/buildModule" },
+        { "$ref": "#/$defs/manifestGap" }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": { "const": "build-project" },
+        "value": { "$ref": "#/$defs/buildProject" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "declared-dependency" },
+        "value": { "$ref": "#/$defs/declaredDependency" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "build-plugin" },
+        "value": { "$ref": "#/$defs/buildPlugin" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "build-module" },
+        "value": { "$ref": "#/$defs/buildModule" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "manifest-gap" },
+        "value": { "$ref": "#/$defs/manifestGap" }
+      }
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+      }
+    },
+    "buildSystem": { "enum": ["maven", "gradle"] },
+    "declaration": { "enum": ["literal", "property-reference", "dynamic"] },
+    "buildProject": {
+      "type": "object",
+      "required": ["buildSystem", "artifact"],
+      "additionalProperties": false,
+      "properties": {
+        "buildSystem": { "$ref": "#/$defs/buildSystem" },
+        "group": { "type": "string", "minLength": 1 },
+        "artifact": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "packaging": { "type": "string", "minLength": 1 }
+      }
+    },
+    "declaredDependency": {
+      "type": "object",
+      "required": ["buildSystem", "group", "artifact", "scope", "declaration"],
+      "additionalProperties": false,
+      "properties": {
+        "buildSystem": { "$ref": "#/$defs/buildSystem" },
+        "group": { "type": "string", "minLength": 1 },
+        "artifact": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string", "minLength": 1 },
+        "declaration": { "$ref": "#/$defs/declaration" }
+      }
+    },
+    "buildPlugin": {
+      "type": "object",
+      "required": ["buildSystem", "plugin", "declaration"],
+      "additionalProperties": false,
+      "properties": {
+        "buildSystem": { "$ref": "#/$defs/buildSystem" },
+        "plugin": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "declaration": { "$ref": "#/$defs/declaration" }
+      }
+    },
+    "buildModule": {
+      "type": "object",
+      "required": ["buildSystem", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "buildSystem": { "$ref": "#/$defs/buildSystem" },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "manifestGap": {
+      "type": "object",
+      "required": ["buildSystem", "code", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "buildSystem": { "$ref": "#/$defs/buildSystem" },
+        "code": { "type": "string", "minLength": 1 },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

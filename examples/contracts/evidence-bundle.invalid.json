@@ -1,0 +1,19 @@
+{
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "excluded": [],
+  "gaps": [],
+  "id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "inventorySha256": "not-a-digest",
+  "kind": "application",
+  "repository": "synthetic-java-service",
+  "schemaVersion": 1,
+  "selectedEvidence": [
+    {
+      "content": "unsafe",
+      "contentSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "lines": "9-3",
+      "observationIds": [],
+      "path": "../.env"
+    }
+  ]
+}

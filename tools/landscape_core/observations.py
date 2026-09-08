@@ -13,7 +13,8 @@ def observation(
     detector: str,
     detector_version: int,
     value: Any,
-    source_path: Optional[str] = None
+    source_path: Optional[str] = None,
+    source_lines: Optional[str] = None,
 ) -> Dict[str, Any]:
     identity = {
         "kind": kind,
@@ -24,6 +25,8 @@ def observation(
         "sourcePath": source_path,
         "value": value,
     }
+    if source_lines is not None:
+        identity["sourceLines"] = source_lines
     digest = hashlib.sha256(
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -37,5 +40,6 @@ def observation(
     }
     if source_path is not None:
         result["source"] = {"path": source_path}
+        if source_lines is not None:
+            result["source"]["lines"] = source_lines
     return result
-

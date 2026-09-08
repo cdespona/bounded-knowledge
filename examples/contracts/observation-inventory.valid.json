@@ -1,0 +1,35 @@
+{
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "detectors": [
+    {
+      "name": "maven",
+      "version": 1
+    }
+  ],
+  "excluded": [],
+  "observations": [
+    {
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "detector": {
+        "name": "maven",
+        "version": 1
+      },
+      "id": "3be291b5b27d6e001a32925037de449d1cd23c993c0a4cf185f904d94cd485aa",
+      "kind": "build-project",
+      "repository": "synthetic-java-service",
+      "source": {
+        "lines": "3-6",
+        "path": "pom.xml"
+      },
+      "value": {
+        "artifact": "synthetic-java-service",
+        "buildSystem": "maven",
+        "group": "com.example.mercurio",
+        "packaging": "jar",
+        "version": "1.0.0-SNAPSHOT"
+      }
+    }
+  ],
+  "repository": "synthetic-java-service",
+  "schemaVersion": 1
+}

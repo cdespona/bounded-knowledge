@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/evidence-bundle.schema.json",
+  "title": "Bounded evidence selected for model analysis",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "repository",
+    "kind",
+    "commit",
+    "inventorySha256",
+    "selectedEvidence",
+    "gaps",
+    "excluded"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "repository": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "kind": { "enum": ["application", "kubernetes", "terraform", "pipeline", "other"] },
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "inventorySha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "selectedEvidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/selectedEvidence" }
+    },
+    "gaps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/gap" }
+    },
+    "excluded": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/excluded" }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+      }
+    },
+    "selectedEvidence": {
+      "type": "object",
+      "required": ["path", "lines", "content", "contentSha256", "observationIds"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" },
+        "content": { "type": "string" },
+        "contentSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "observationIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "required": ["code", "detail", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "detail": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/source" },
+        "observationId": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "excluded": {
+      "type": "object",
+      "required": ["path", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

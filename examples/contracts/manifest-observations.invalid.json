@@ -1,0 +1,21 @@
+[
+  {
+    "kind": "declared-dependency",
+    "source": { "lines": "16-12", "path": "pom.xml" },
+    "value": {
+      "artifact": "spring-context",
+      "buildSystem": "maven",
+      "declaration": "resolved",
+      "group": "org.springframework",
+      "scope": "compile"
+    }
+  },
+  {
+    "kind": "manifest-gap",
+    "source": { "lines": "8", "path": "../build.gradle.kts" },
+    "value": {
+      "buildSystem": "gradle",
+      "code": "dynamic-expression"
+    }
+  }
+]

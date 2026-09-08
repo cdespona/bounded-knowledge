@@ -1,0 +1,34 @@
+{
+  "analyzedCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "evidenceBundleId": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "kind": "application",
+  "proposedProfile": {
+    "analyzedCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "claims": [
+      {
+        "analyzedAt": "not-a-date",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [],
+        "id": "unsupported-confirmation",
+        "statement": "An unsupported assertion is confirmed.",
+        "status": "confirmed"
+      },
+      {
+        "analyzedAt": "2026-09-08T10:00:00Z",
+        "confidence": "low",
+        "counterevidence": [],
+        "evidence": [],
+        "id": "missing-question",
+        "statement": "The answer is not known.",
+        "status": "unknown"
+      }
+    ],
+    "kind": "application",
+    "openQuestions": [],
+    "repository": "different-service",
+    "schemaVersion": 1
+  },
+  "repository": "synthetic-java-service",
+  "schemaVersion": 1
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/candidate-envelope.schema.json",
+  "title": "Model-produced repository profile candidate",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "repository",
+    "kind",
+    "analyzedCommit",
+    "evidenceBundleId",
+    "proposedProfile"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "repository": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "kind": { "enum": ["application", "kubernetes", "terraform", "pipeline", "other"] },
+    "analyzedCommit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "evidenceBundleId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "proposedProfile": { "$ref": "repository-profile.schema.json" }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "excluded": [
+    {
+      "path": ".env",
+      "reason": "sensitive-file"
+    }
+  ],
+  "gaps": [
+    {
+      "code": "dynamic-expression",
+      "detail": "A computed Gradle declaration was not interpreted.",
+      "observationId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "source": {
+        "lines": "8",
+        "path": "build.gradle.kts"
+      }
+    }
+  ],
+  "id": "37e18ce2e918bb87f5f2dafe2f08925d80d43cac330f0e0d230be97e15af7e2b",
+  "inventorySha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "kind": "application",
+  "repository": "synthetic-java-service",
+  "schemaVersion": 1,
+  "selectedEvidence": [
+    {
+      "content": "  <artifactId>synthetic-java-service</artifactId>",
+      "contentSha256": "4621b03e81ddafe7be429ea7733a8b3cab977ff9ee51949b7e2e57584220c693",
+      "lines": "5",
+      "observationIds": [
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      ],
+      "path": "pom.xml"
+    }
+  ]
+}

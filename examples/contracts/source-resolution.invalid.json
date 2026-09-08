@@ -1,0 +1,12 @@
+{
+  "commit": "short-sha",
+  "configuredPath": "relative/service",
+  "copilotAccessApproved": "yes",
+  "copilotConfigurationFiles": ["../AGENTS.md"],
+  "copilotConfigurationSha256": "not-a-digest",
+  "exclusions": ["target", "target"],
+  "kind": "unknown-kind",
+  "repository": "Synthetic_Service",
+  "resolvedPath": "relative/service",
+  "schemaVersion": 2
+}

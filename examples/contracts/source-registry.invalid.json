@@ -1,0 +1,18 @@
+{
+  "repositories": [
+    {
+      "enabled": "yes",
+      "exclude": ["../secrets"],
+      "id": "synthetic-service",
+      "kind": "unknown-kind",
+      "path": "relative/service"
+    },
+    {
+      "enabled": true,
+      "id": "synthetic-service",
+      "kind": "application",
+      "path": "relative/service"
+    }
+  ],
+  "schemaVersion": 1
+}

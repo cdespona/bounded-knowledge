@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/source-resolution.schema.json",
+  "title": "Approved source resolution result",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "repository",
+    "kind",
+    "configuredPath",
+    "resolvedPath",
+    "commit",
+    "exclusions",
+    "copilotConfigurationFiles",
+    "copilotConfigurationSha256",
+    "copilotAccessApproved"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "repository": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "kind": { "enum": ["application", "kubernetes", "terraform", "pipeline", "other"] },
+    "configuredPath": { "type": "string", "pattern": "^/" },
+    "resolvedPath": { "type": "string", "pattern": "^/" },
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "exclusions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "copilotConfigurationFiles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "copilotConfigurationSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "copilotAccessApproved": { "type": "boolean" }
+  }
+}

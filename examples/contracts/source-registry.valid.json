@@ -1,0 +1,19 @@
+{
+  "repositories": [
+    {
+      "enabled": true,
+      "exclude": ["docs/generated"],
+      "id": "synthetic-java-service",
+      "kind": "application",
+      "path": "/tmp/bounded-knowledge/synthetic-java-service"
+    },
+    {
+      "approvedCopilotConfigurationSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "enabled": true,
+      "id": "synthetic-kotlin-service",
+      "kind": "application",
+      "path": "/tmp/bounded-knowledge/synthetic-kotlin-service"
+    }
+  ],
+  "schemaVersion": 1
+}

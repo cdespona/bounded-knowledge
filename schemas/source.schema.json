@@ -3,10 +3,10 @@
   "$id": "https://mercurio.local/schemas/source.schema.json",
   "title": "Landscape source registry",
   "type": "object",
-  "required": ["version", "repositories"],
+  "required": ["schemaVersion", "repositories"],
   "additionalProperties": false,
   "properties": {
-    "version": { "const": 1 },
+    "schemaVersion": { "const": 1 },
     "repositories": {
       "type": "array",
       "items": {
@@ -18,7 +18,7 @@
           "kind": {
             "enum": ["application", "kubernetes", "terraform", "pipeline", "other"]
           },
-          "path": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "pattern": "^/" },
           "enabled": { "type": "boolean" },
           "approvedCopilotConfigurationSha256": {
             "type": "string",
@@ -34,4 +34,3 @@
     }
   }
 }
-

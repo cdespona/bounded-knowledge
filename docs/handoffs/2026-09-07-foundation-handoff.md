@@ -158,9 +158,11 @@ Sequential operations:
 - findings ranking;
 - canonical catalog promotion.
 
-Pin Conductor to an explicit release rather than tracking `main`. The available design
-session used the `microsoft/conductor` skill pinned to `v0.1.18` as a reference, but the
-actual version must be verified before installation.
+Pin Conductor to an explicit release rather than tracking `main`. The original design
+session used the `microsoft/conductor` skill pinned to `v0.1.18` as a reference. That
+version is historical context, not an installation recommendation. Review the current
+release and pin an explicit tag or full commit only after the deterministic contracts and
+direct synthetic Copilot trial are stable.
 
 ## GitHub Copilot CLI safety
 
@@ -208,8 +210,9 @@ The project has been moved safely from `/Users/cdespona/code/mercurio-knowledge`
 `/Users/cdespona/personal/bounded-knowledge`. The old copy remains temporarily available
 for rollback.
 
-The new project is an initialized Git repository on branch `main`. No commit has been
-created and all project files are currently untracked.
+The new project is an initialized Git repository on branch `main`, with remote `origin`
+configured. The deterministic foundation was committed as `1356054` (`Initial Mercurio
+Knowledge foundation`).
 
 Implemented files include:
 
@@ -219,18 +222,27 @@ AGENTS.md
 .github/copilot-instructions.md
 .gitignore
 pyproject.toml
-sources.yaml
+sources.json
 schemas/source.schema.json
 schemas/observation.schema.json
 schemas/claim.schema.json
 schemas/repository-profile.schema.json
+schemas/manifest-observation.schema.json
+schemas/source-resolution.schema.json
+schemas/evidence-bundle.schema.json
+schemas/candidate-envelope.schema.json
 tools/landscape
 tools/landscape_core/
+tools/landscape_core/contracts.py
 tools/detectors/git.py
 tools/detectors/generic_files.py
 tools/tests/test_landscape.py
+tools/tests/test_cli.py
+tools/tests/test_contracts.py
 examples/synthetic-java-service/
 examples/synthetic-kotlin-service/
+examples/contracts/
+docs/contracts/slice-1.md
 work/.gitkeep
 workflows/.gitkeep
 ```
@@ -265,7 +277,10 @@ The actual test command is:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v
 ```
 
-Seven tests pass:
+Twenty-two tests pass: seven original foundation tests, six subprocess-level CLI
+acceptance tests, and nine persisted-contract tests.
+
+The original foundation behaviours remain covered:
 
 1. Java/Maven inventory is deterministic and valid.
 2. Kotlin/Gradle manifests and source files are recognized.
@@ -275,42 +290,129 @@ Seven tests pass:
 6. Source-repository Copilot customizations are reported.
 7. Tampered observations fail validation.
 
-An end-to-end Kotlin CLI smoke test also passed:
+The CLI acceptance suite now protects the complete current command surface, including:
 
 - preflight returned a clean repository and full SHA;
 - discovery emitted Git and generic-file observations;
 - validation returned `valid: true`;
 - status returned `changed: false` for the same commit.
+- dirty-preflight, invalid-inventory, operational-error, and argument-error exit codes;
+- `discover` standard-output and `--output` destination behaviour.
 
 ## Known limitations
 
 - Maven and Gradle files are recognized but not parsed.
 - Java and Kotlin files are classified but not semantically analyzed.
-- `sources.yaml` is currently an empty declarative registry; CLI commands receive explicit
+- `sources.json` is currently an empty declarative registry; CLI commands receive explicit
   paths.
 - The observation inventory has an operational dependency-free validator. Claim and
   repository-profile schemas are not yet connected to a workflow.
 - No Conductor workflow has been created.
 - No private repository has been requested or analyzed.
-- No project files have been committed.
+- The source-registry contract is defined, but its loader and approved-path resolver are
+  intentionally deferred to Slice 2.
 
 ## Recommended next milestone
 
-Implement one synthetic vertical slice before using private source repositories:
+Proceed through small, gated slices. Stabilize every deterministic producer-consumer
+boundary before adding model execution or orchestration.
 
-1. Add deterministic Maven and Gradle parsers with fixture-based tests.
-2. Add a source-registry loader and approved-path resolution.
-3. Implement evidence selection without reading sensitive content.
-4. Pin and install a reviewed Conductor release.
-5. Create `workflows/analyze-repository.yaml`.
-6. Add a read-only `repository-cartographer` prompt with a strict output schema.
-7. Route its output through the deterministic validator.
-8. Add a human approval gate.
-9. Add a promotion script that shows a diff before writing to `catalog/`.
-10. Exercise the complete flow against both synthetic repositories.
+```text
+contract fixtures
+  -> approved source resolution
+  -> bounded manifest extraction
+  -> deterministic evidence selection
+  -> candidate validation
+  -> direct read-only Copilot trial
+  -> Conductor orchestration
+  -> human approval
+  -> diff-based promotion
+```
 
-Do not create platform or reconciliation workflows until this single-repository flow is
-reliable.
+### Slice 1: stabilize deterministic contracts
+
+Implemented on 2026-09-08. This slice defines contracts and tests; it does not implement
+Maven or Gradle parsing, evidence selection, Copilot execution, Conductor workflows, or
+catalog promotion.
+
+Define representative JSON fixtures and the corresponding dependency-free validation
+rules for:
+
+1. Parsed manifest observations, including stable observation kinds, value shapes,
+   detector versions, source paths, and line ranges.
+2. Unsupported or dynamic manifest constructs, which must remain visible as explicit
+   gaps rather than being silently omitted or promoted into inferred dependencies.
+3. Source-registry entries and resolution results, including repository identity, kind,
+   enabled state, resolved path, exclusions, and approved Copilot-configuration digest.
+4. Evidence bundles, including repository identifier, analyzed commit, inventory digest,
+   bounded selected content, observation references, exclusions, and unsupported gaps.
+5. Model-produced candidate envelopes, including repository identifier, analyzed commit,
+   evidence-bundle identity, and the proposed repository profile.
+6. CLI JSON envelopes, exit-code meanings, error output, stable ordering, and destination
+   path behavior for every planned command.
+
+Add subprocess-level acceptance tests for the existing CLI commands so their complete
+surface becomes a protected contract:
+
+```text
+./tools/landscape preflight SOURCE
+./tools/landscape discover SOURCE --repository ID [--output PATH]
+./tools/landscape validate INVENTORY [--source SOURCE]
+./tools/landscape status SOURCE --inventory INVENTORY
+```
+
+Contract decisions required during this slice:
+
+- Use JSON for machine-consumed persisted artifacts. `sources.yaml` was replaced with
+  `sources.json` so the registry remains compatible with the standard-library-only
+  runtime. JSON also remains YAML-compatible for a later integration if required.
+- Treat Maven and Gradle extraction as bounded literal observation, not dependency
+  resolution. Effective POMs, transitive dependencies, executed Gradle models, and
+  computed declarations are outside the discovery safety boundary.
+- Require exact source paths and line ranges where practical. Commit SHA pins the source
+  revision; evidence bundles additionally carry an inventory digest so consumers can
+  detect mismatched artifacts.
+- Keep ordinary failures on standard error and machine-readable successful or validation
+  results on standard output. Document every non-zero exit code before workflows consume
+  it.
+- Keep candidate data outside `catalog/` until it passes deterministic validation and a
+  human approval gate.
+
+Slice 1 is complete when the fixtures, schemas or equivalent operational validators,
+CLI acceptance tests, and contract documentation agree; repeated serialization is
+byte-for-byte stable; invalid examples fail closed; and no downstream implementation has
+to guess a field or exit-code meaning.
+
+### Slice 2: source resolution
+
+Implement the registry loader and approved-path resolver against the Slice 1 contract.
+Fail closed for duplicate identifiers or resolved paths, disabled sources, missing or
+dirty repositories, non-root Git paths, symbolic-link or traversal escapes, invalid
+exclusions, and unapproved Copilot customizations.
+
+### Slice 3: manifest extraction and evidence selection
+
+Add fixture-tested Maven XML extraction and conservative Gradle literal extraction. Never
+execute Maven, Gradle, wrappers, hooks, or application code. Then produce deterministic,
+bounded evidence bundles that reapply safety exclusions and verify that repository HEAD
+still matches the inventory commit immediately before reading selected content.
+
+### Slice 4: candidate validation and direct Copilot trial
+
+Connect the claim and repository-profile contracts to dependency-free operational
+validators. Run the read-only repository cartographer directly against both synthetic
+repositories before adding orchestration. Reject evidence paths, commits, observation
+references, statuses, or line ranges that cannot be verified from the selected bundle.
+
+### Slice 5: Conductor and promotion
+
+Review and pin a current Conductor release only after Slices 1-4 are stable. Create the
+single-repository `workflows/analyze-repository.yaml` as a thin orchestration layer, add a
+human approval gate, and implement single-writer promotion that displays the canonical
+diff before writing.
+
+Do not request private repositories or create platform and reconciliation workflows until
+the complete single-repository flow is reliable against both synthetic repositories.
 
 ## Pilot success questions
 
@@ -339,10 +441,9 @@ against the current working tree. Preserve independent source-repository boundar
 keep all repository artifacts in English. Do not request or analyze private application
 repositories yet.
 
-Start by reviewing the implemented deterministic foundation and propose the smallest
-implementation plan for the next milestone: Maven/Gradle parsing, source-registry path
-resolution, evidence selection, and the first synthetic Conductor workflow. Do not create
-the workflow until the deterministic command contracts it consumes are stable and
-reviewed.
+Slice 1 is implemented. Review `docs/contracts/slice-1.md`, its schemas, validators,
+fixtures, and CLI acceptance tests. The next proposed milestone is Slice 2: implement the
+source-registry loader and approved-path resolver against the reviewed contract. Do not
+implement manifest parsers, evidence selection, Copilot execution, Conductor workflows,
+or promotion as part of that slice.
 ```
-
