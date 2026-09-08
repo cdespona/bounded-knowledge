@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/source.schema.json",
+  "title": "Landscape source registry",
+  "type": "object",
+  "required": ["version", "repositories"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "path", "enabled"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "kind": {
+            "enum": ["application", "kubernetes", "terraform", "pipeline", "other"]
+          },
+          "path": { "type": "string", "minLength": 1 },
+          "enabled": { "type": "boolean" },
+          "approvedCopilotConfigurationSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "exclude": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}
+

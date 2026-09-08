@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/repository-profile.schema.json",
+  "title": "Application or platform repository profile",
+  "type": "object",
+  "required": ["schemaVersion", "repository", "kind", "analyzedCommit", "claims", "openQuestions"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "repository": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "kind": { "enum": ["application", "kubernetes", "terraform", "pipeline", "other"] },
+    "analyzedCommit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "claim.schema.json" }
+    },
+    "openQuestions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
+

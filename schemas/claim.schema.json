@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/claim.schema.json",
+  "title": "Evidence-backed semantic claim",
+  "type": "object",
+  "required": ["id", "statement", "status", "confidence", "evidence", "counterevidence", "analyzedAt"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "statement": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["confirmed", "inferred", "unknown"] },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" }
+    },
+    "counterevidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" }
+    },
+    "missingEvidence": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "analyzedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "required": ["repository", "commit", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" },
+        "observationId": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}
+

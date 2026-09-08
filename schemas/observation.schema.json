@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/observation.schema.json",
+  "title": "Deterministic repository inventory",
+  "type": "object",
+  "required": ["schemaVersion", "repository", "commit", "detectors", "observations", "excluded"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "repository": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "detectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "version"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/observation" }
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "required": ["id", "kind", "repository", "commit", "detector", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "kind": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+        "source": {
+          "type": "object",
+          "required": ["path"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+          }
+        },
+        "detector": {
+          "type": "object",
+          "required": ["name", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "version": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "value": {}
+      }
+    }
+  }
+}
+
