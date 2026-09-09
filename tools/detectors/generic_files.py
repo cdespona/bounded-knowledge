@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from landscape_core.observations import observation
-from landscape_core.safety import EXCLUDED_DIRECTORIES, exclusion_reason
+from landscape_core.safety import directory_exclusion_reason, exclusion_reason
 
 
 MANIFEST_NAMES = {
@@ -50,7 +50,7 @@ class GenericFileDetector:
                 relative = directory.relative_to(root).as_posix()
                 if directory.is_symlink():
                     excluded.append({"path": relative, "reason": "symbolic-link"})
-                elif directory_name in EXCLUDED_DIRECTORIES:
+                elif directory_exclusion_reason(directory.relative_to(root)) is not None:
                     excluded.append({"path": relative, "reason": "excluded-directory"})
                 else:
                     retained_directories.append(directory_name)

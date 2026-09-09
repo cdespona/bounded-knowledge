@@ -109,30 +109,30 @@ Candidates remain outside `catalog/`. Validation does not authorize promotion.
 ./tools/landscape status SOURCE --inventory INVENTORY
 ./tools/landscape sources validate REGISTRY
 ./tools/landscape sources resolve ID --registry REGISTRY
+./tools/landscape evidence select INVENTORY --source SOURCE --output PATH
 ```
 
 | Command outcome | Standard output | Standard error | Exit |
 | --- | --- | --- | --- |
 | Help | Human-readable help | Empty | `0` |
-| Successful command | JSON, unless `discover --output` writes the artifact | Empty | `0` |
+| Successful command | JSON, unless a command with `--output` writes the artifact | Empty | `0` |
 | Dirty `preflight` | JSON result with `clean: false` | Empty | `2` |
 | Unapproved Copilot customization | Resolution JSON with approval false | Empty | `2` |
 | Invalid inventory | JSON result with `valid: false` | Empty | `1` |
 | Operational or malformed-input failure | Empty | One `error:` line | `1` |
 | Argument parsing failure | Empty | Usage and diagnostic | `2` |
 
-`discover --output` creates missing parent directories and produces no standard output.
-All JSON written by the current CLI is stable, sorted, two-space-indented, and terminated
-by one newline.
+`discover --output` and `evidence select --output` create missing parent directories and
+produce no standard output. All JSON written by the current CLI is stable, sorted,
+two-space-indented, and terminated by one newline.
 
 ## Reserved later command contracts
 
-These commands and flags are the reserved consumers of the Slice 1 artifacts. They are
-not yet implemented. Changing them requires an explicit contract revision before a
-workflow consumes the new surface.
+The candidate command and its flags are the remaining reserved consumer of the Slice 1
+artifacts. It is not yet implemented. Changing it requires an explicit contract revision
+before a workflow consumes the new surface.
 
 ```text
-./tools/landscape evidence select INVENTORY --source SOURCE --output PATH
 ./tools/landscape candidate validate CANDIDATE --evidence BUNDLE
 ```
 

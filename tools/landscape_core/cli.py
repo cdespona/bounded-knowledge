@@ -8,6 +8,7 @@ import sys
 
 from .contracts import validate_source_registry
 from .discovery import discover, preflight
+from .evidence import select_evidence
 from .git_repository import RepositoryError, commit_sha, require_repository_root
 from .sources import resolve_source
 from .validation import validate_inventory
@@ -66,6 +67,19 @@ def build_parser():
     )
     sources_resolve_parser.add_argument("repository", type=_repository_id)
     sources_resolve_parser.add_argument("--registry", required=True)
+
+    evidence_parser = subparsers.add_parser(
+        "evidence", help="select bounded evidence from an inventory"
+    )
+    evidence_subparsers = evidence_parser.add_subparsers(
+        dest="evidence_command", required=True
+    )
+    evidence_select_parser = evidence_subparsers.add_parser(
+        "select", help="create a deterministic evidence bundle"
+    )
+    evidence_select_parser.add_argument("inventory")
+    evidence_select_parser.add_argument("--source", required=True)
+    evidence_select_parser.add_argument("--output", required=True)
     return parser
 
 
@@ -114,6 +128,11 @@ def main(argv=None):
             result = resolve_source(args.registry, args.repository)
             _write_json(result)
             return 0 if result["copilotAccessApproved"] else 2
+
+        if args.command == "evidence" and args.evidence_command == "select":
+            inventory = json.loads(Path(args.inventory).read_text(encoding="utf-8"))
+            _write_json(select_evidence(inventory, args.source), output=args.output)
+            return 0
     except (OSError, ValueError, RepositoryError, json.JSONDecodeError) as error:
         sys.stderr.write("error: {}\n".format(error))
         return 1

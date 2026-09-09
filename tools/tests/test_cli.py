@@ -6,11 +6,15 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import sys
 
 
 TOOLS = Path(__file__).resolve().parents[1]
 PROJECT = TOOLS.parent
 LANDSCAPE = TOOLS / "landscape"
+sys.path.insert(0, str(TOOLS))
+
+from landscape_core.contracts import validate_evidence_bundle  # noqa: E402
 
 
 def git(path, *args):
@@ -49,7 +53,7 @@ class LandscapeCliTest(unittest.TestCase):
     def test_help_contract(self):
         result = self.run_cli("--help")
         self.assertEqual(0, result.returncode)
-        self.assertIn("{preflight,discover,validate,status,sources}", result.stdout)
+        self.assertIn("{preflight,discover,validate,status,sources,evidence}", result.stdout)
         self.assertEqual("", result.stderr)
 
     def test_argument_failure_exit_contract(self):
@@ -141,6 +145,116 @@ class LandscapeCliTest(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertEqual("", result.stdout)
         self.assertIn("independent Git repository root", result.stderr)
+
+    def test_evidence_select_writes_stable_valid_bundle(self):
+        secret = self.repository / ".env"
+        secret.write_text("SYNTHETIC_SECRET=must-not-appear\n", encoding="utf-8")
+        git(self.repository, "add", ".env", "--force")
+        git(self.repository, "commit", "-q", "-m", "Add excluded evidence fixture")
+        inventory_path = self.base / "inventory.json"
+        self.assertEqual(0, self.run_cli(
+            "discover", self.repository, "--repository", "synthetic-java-service",
+            "--output", inventory_path,
+        ).returncode)
+        first_path = self.base / "nested" / "evidence.json"
+        first = self.run_cli(
+            "evidence", "select", inventory_path, "--source", self.repository,
+            "--output", first_path,
+        )
+        self.assertEqual(0, first.returncode)
+        self.assertEqual("", first.stdout)
+        self.assertEqual("", first.stderr)
+        bundle = json.loads(first_path.read_text(encoding="utf-8"))
+        self.assertEqual([], validate_evidence_bundle(bundle))
+        self.assertEqual("application", bundle["kind"])
+        self.assertTrue(bundle["selectedEvidence"])
+        self.assertIn("profile-dependent", {item["code"] for item in bundle["gaps"]})
+        self.assertIn(
+            {"path": ".env", "reason": "sensitive-file"}, bundle["excluded"]
+        )
+        self.assertNotIn("must-not-appear", first_path.read_text(encoding="utf-8"))
+
+        second_path = self.base / "evidence-again.json"
+        second = self.run_cli(
+            "evidence", "select", inventory_path, "--source", self.repository,
+            "--output", second_path,
+        )
+        self.assertEqual(0, second.returncode)
+        self.assertEqual(first_path.read_bytes(), second_path.read_bytes())
+
+    def test_evidence_select_rejects_stale_and_dirty_sources(self):
+        inventory_path = self.base / "inventory.json"
+        self.assertEqual(0, self.run_cli(
+            "discover", self.repository, "--repository", "synthetic-java-service",
+            "--output", inventory_path,
+        ).returncode)
+        output = self.base / "evidence.json"
+
+        tampered_path = self.base / "tampered-inventory.json"
+        tampered = json.loads(inventory_path.read_text(encoding="utf-8"))
+        tampered["observations"][0]["value"] = {"tampered": True}
+        tampered_path.write_text(json.dumps(tampered), encoding="utf-8")
+        invalid = self.run_cli(
+            "evidence", "select", tampered_path, "--source", self.repository,
+            "--output", output,
+        )
+        self.assertEqual(1, invalid.returncode)
+        self.assertEqual("", invalid.stdout)
+        self.assertIn("Invalid inventory", invalid.stderr)
+        self.assertFalse(output.exists())
+
+        (self.repository / "README.md").write_text("dirty\n", encoding="utf-8")
+        dirty = self.run_cli(
+            "evidence", "select", inventory_path, "--source", self.repository,
+            "--output", output,
+        )
+        self.assertEqual(1, dirty.returncode)
+        self.assertEqual("", dirty.stdout)
+        self.assertIn("clean working tree", dirty.stderr)
+        self.assertFalse(output.exists())
+
+        git(self.repository, "add", "README.md")
+        git(self.repository, "commit", "-q", "-m", "Advance source")
+        stale = self.run_cli(
+            "evidence", "select", inventory_path, "--source", self.repository,
+            "--output", output,
+        )
+        self.assertEqual(1, stale.returncode)
+        self.assertEqual("", stale.stdout)
+        self.assertIn("Inventory commit does not match", stale.stderr)
+        self.assertFalse(output.exists())
+
+    def test_evidence_selection_enforces_content_bounds(self):
+        for index in range(18):
+            path = self.repository / "notes-{:02d}.md".format(index)
+            path.write_text("x" * (17 * 1024) + "\n", encoding="utf-8")
+        git(self.repository, "add", ".")
+        git(self.repository, "commit", "-q", "-m", "Add bounded evidence fixtures")
+        inventory_path = self.base / "bounded-inventory.json"
+        self.assertEqual(0, self.run_cli(
+            "discover", self.repository, "--repository", "synthetic-java-service",
+            "--output", inventory_path,
+        ).returncode)
+        output = self.base / "bounded-evidence.json"
+        result = self.run_cli(
+            "evidence", "select", inventory_path, "--source", self.repository,
+            "--output", output,
+        )
+        self.assertEqual(0, result.returncode)
+        bundle = json.loads(output.read_text(encoding="utf-8"))
+        self.assertLessEqual(
+            sum(len(item["content"].encode("utf-8")) for item in bundle["selectedEvidence"]),
+            256 * 1024,
+        )
+        self.assertTrue(all(
+            len(item["content"].encode("utf-8")) <= 16 * 1024
+            for item in bundle["selectedEvidence"]
+        ))
+        self.assertIn("content-truncated", {item["code"] for item in bundle["gaps"]})
+        self.assertIn(
+            "selection-total-content-limit",
+            {item["reason"] for item in bundle["excluded"]},
+        )
 
 
 if __name__ == "__main__":

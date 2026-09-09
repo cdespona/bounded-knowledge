@@ -235,8 +235,12 @@ tools/landscape
 tools/landscape_core/
 tools/landscape_core/contracts.py
 tools/landscape_core/sources.py
+tools/landscape_core/evidence.py
 tools/detectors/git.py
 tools/detectors/generic_files.py
+tools/detectors/manifest_files.py
+tools/detectors/maven.py
+tools/detectors/gradle.py
 tools/tests/test_landscape.py
 tools/tests/test_cli.py
 tools/tests/test_contracts.py
@@ -246,6 +250,7 @@ examples/synthetic-kotlin-service/
 examples/contracts/
 docs/contracts/slice-1.md
 docs/contracts/slice-2.md
+docs/contracts/slice-3.md
 work/.gitkeep
 workflows/.gitkeep
 ```
@@ -269,6 +274,10 @@ The deterministic tool currently supports:
 
 ./tools/landscape sources resolve application-id \
   --registry sources.json
+
+./tools/landscape evidence select work/application-id.json \
+  --source /path/to/repository \
+  --output work/application-id-evidence.json
 ```
 
 The initial implementation deliberately uses Python 3.9 standard library only because
@@ -285,8 +294,21 @@ The actual test command is:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v
 ```
 
-Thirty-one tests pass: seven original foundation tests, six subprocess-level CLI
+Thirty-six tests pass: nine foundation and detector tests, nine subprocess-level CLI
 acceptance tests, nine persisted-contract tests, and nine source-resolution tests.
+
+Latest Slice 3 validation on 2026-09-09:
+
+```text
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v
+PYTHONPYCACHEPREFIX=/tmp/bounded-knowledge-slice3-pyc python3 -m compileall -q tools
+./tools/landscape --help
+./tools/landscape evidence select --help
+git diff --check
+```
+
+All checks passed. No Maven, Gradle, wrapper, source-owned build, Copilot invocation, or
+private-repository analysis was performed.
 
 The original foundation behaviours remain covered:
 
@@ -297,6 +319,10 @@ The original foundation behaviours remain covered:
 5. Commit changes are detectable.
 6. Source-repository Copilot customizations are reported.
 7. Tampered observations fail validation.
+8. Java/Kotlin packages named `out` below `src/main` or `src/test` remain visible while
+   genuine build-output `out/` directories are excluded.
+9. Maven and Gradle literal declarations produce contract-valid project, dependency,
+   plugin, and module observations with explicit unsupported/dynamic gaps.
 
 The CLI acceptance suite now protects the complete current command surface, including:
 
@@ -309,13 +335,17 @@ The CLI acceptance suite now protects the complete current command surface, incl
 - source-registry validation and deterministic source resolution;
 - dirty, disabled, missing, nested, aliased, and symbolic-link source rejection;
 - repository-owned Copilot customization discovery, hashing, and approval blocking.
+- bounded evidence selection, stable output, source commit/dirty rejection, and byte
+  limit enforcement.
 
 ## Known limitations
 
-- Maven and Gradle files are recognized but not parsed.
+- Maven and Gradle parsing is deliberately literal and bounded. Effective POMs,
+  transitive dependencies, profiles, Gradle catalogs, computed declarations, and full
+  Groovy/Kotlin syntax are not evaluated; these constructs produce visible gaps.
 - Java and Kotlin files are classified but not semantically analyzed.
-- `sources.json` is currently empty; no synthetic or private source path is registered by
-  default.
+- `sources.json` is a local, user-owned registry input. Slice 3 does not alter it or
+  analyze any configured private repository.
 - The observation inventory has an operational dependency-free validator. Claim and
   repository-profile schemas are not yet connected to a workflow.
 - No Conductor workflow has been created.
@@ -402,10 +432,12 @@ otherwise safe customizations produce a reviewable resolution document with exit
 
 ### Slice 3: manifest extraction and evidence selection
 
-Add fixture-tested Maven XML extraction and conservative Gradle literal extraction. Never
-execute Maven, Gradle, wrappers, hooks, or application code. Then produce deterministic,
-bounded evidence bundles that reapply safety exclusions and verify that repository HEAD
-still matches the inventory commit immediately before reading selected content.
+Implemented on 2026-09-09. Fixture-tested Maven XML extraction and conservative Gradle
+literal extraction emit the four supported manifest observation kinds plus explicit
+gaps. The evidence selector revalidates the inventory and clean source, checks `HEAD`
+immediately before bounded reads, reapplies exclusions and symbolic-link checks, and
+validates its stable bundle before writing. Exact supported syntax, limits, routing-kind
+fallback, and known gaps are documented in `docs/contracts/slice-3.md`.
 
 ### Slice 4: candidate validation and direct Copilot trial
 
@@ -451,9 +483,8 @@ against the current working tree. Preserve independent source-repository boundar
 keep all repository artifacts in English. Do not request or analyze private application
 repositories yet.
 
-Slices 1 and 2 are implemented. Review `docs/contracts/slice-1.md` and
-`docs/contracts/slice-2.md`, their schemas, validators, fixtures, and acceptance tests.
-The next proposed milestone is Slice 3: bounded Maven/Gradle manifest extraction and
-deterministic evidence selection. Do not implement Copilot execution, Conductor
-workflows, or promotion as part of that slice.
+Slices 1 through 3 are implemented. Review `docs/contracts/slice-1.md` through
+`docs/contracts/slice-3.md`, their schemas, validators, fixtures, and acceptance tests.
+The next proposed milestone is Slice 4: candidate validation and a direct read-only
+Copilot trial. Do not implement Conductor workflows or promotion as part of that slice.
 ```

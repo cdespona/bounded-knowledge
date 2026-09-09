@@ -53,10 +53,25 @@ COPILOT_INSTRUCTION_NAMES = {
 }
 
 
-def exclusion_reason(relative_path: Path, size: Optional[int] = None) -> Optional[str]:
+def directory_exclusion_reason(relative_path: Path) -> Optional[str]:
+    """Return an exclusion reason for a directory path, accounting for source packages."""
     parts = relative_path.parts
-    if any(part in EXCLUDED_DIRECTORIES for part in parts[:-1]):
+    for index, part in enumerate(parts):
+        if part not in EXCLUDED_DIRECTORIES:
+            continue
+        if part == "out" and any(
+            parts[position : position + 2] in (("src", "main"), ("src", "test"))
+            for position in range(index)
+        ):
+            continue
         return "excluded-directory"
+    return None
+
+
+def exclusion_reason(relative_path: Path, size: Optional[int] = None) -> Optional[str]:
+    directory_reason = directory_exclusion_reason(relative_path.parent)
+    if directory_reason is not None:
+        return directory_reason
 
     name = relative_path.name.lower()
     if name in SENSITIVE_EXACT_NAMES or name.startswith(".env."):
@@ -73,10 +88,14 @@ def exclusion_reason(relative_path: Path, size: Optional[int] = None) -> Optiona
 def copilot_configuration_files(root: Path):
     candidates = {root / ".github" / "copilot-instructions.md"}
     for current, directory_names, file_names in os.walk(root, topdown=True):
-        directory_names[:] = sorted(
-            name for name in directory_names if name not in EXCLUDED_DIRECTORIES
-        )
         current_path = Path(current)
+        directory_names[:] = [
+            name
+            for name in sorted(directory_names)
+            if directory_exclusion_reason(
+                (current_path / name).relative_to(root)
+            ) is None
+        ]
         candidates.update(
             current_path / name
             for name in file_names

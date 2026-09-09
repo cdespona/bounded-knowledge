@@ -60,6 +60,22 @@ class LandscapeTest(unittest.TestCase):
         categories = {item["value"]["category"] for item in first["observations"] if "category" in item["value"]}
         self.assertIn("maven", categories)
         self.assertIn("java-source", categories)
+        manifest_kinds = {
+            item["kind"] for item in first["observations"]
+            if item["detector"]["name"] == "maven-manifest"
+        }
+        self.assertEqual(
+            {"build-project", "declared-dependency", "build-plugin", "build-module", "manifest-gap"},
+            manifest_kinds,
+        )
+        dependency = next(
+            item for item in first["observations"]
+            if item["kind"] == "declared-dependency"
+        )
+        self.assertEqual("${spring.version}", dependency["value"]["version"])
+        self.assertEqual("property-reference", dependency["value"]["declaration"])
+        self.assertEqual("pom.xml", dependency["source"]["path"])
+        self.assertRegex(dependency["source"]["lines"], r"^[1-9][0-9]*-[1-9][0-9]*$")
 
     def test_tampered_observation_fails_validation(self):
         repository = self.make_repository("synthetic-java-service")
@@ -77,6 +93,35 @@ class LandscapeTest(unittest.TestCase):
         self.assertIn("gradle-kotlin", categories)
         self.assertIn("gradle-kotlin-settings", categories)
         self.assertIn("kotlin-source", categories)
+        parsed = [
+            item for item in inventory["observations"]
+            if item["detector"]["name"] == "gradle-manifest"
+        ]
+        kinds = {item["kind"] for item in parsed}
+        self.assertEqual(
+            {"build-project", "declared-dependency", "build-plugin", "build-module", "manifest-gap"},
+            kinds,
+        )
+        property_dependency = next(
+            item for item in parsed
+            if item["kind"] == "declared-dependency"
+            and item["value"].get("artifact") == "junit-jupiter"
+        )
+        self.assertEqual("$junitVersion", property_dependency["value"]["version"])
+        self.assertEqual("property-reference", property_dependency["value"]["declaration"])
+        gap_codes = {item["value"]["code"] for item in parsed if item["kind"] == "manifest-gap"}
+        self.assertTrue({"dynamic-plugin", "dynamic-dependency", "unsupported-settings"} <= gap_codes)
+
+    def test_malformed_maven_xml_is_a_visible_gap(self):
+        repository = self.make_repository("synthetic-java-service")
+        (repository / "pom.xml").write_text("<project><artifactId>broken", encoding="utf-8")
+        git(repository, "add", "pom.xml")
+        git(repository, "commit", "-q", "-m", "Break synthetic POM")
+
+        inventory = discover(repository, "synthetic-java-service")
+        self.assertEqual([], validate_inventory(inventory, source=repository))
+        gaps = [item for item in inventory["observations"] if item["kind"] == "manifest-gap"]
+        self.assertEqual(["unsupported-xml"], [item["value"]["code"] for item in gaps])
 
     def test_sensitive_files_are_excluded_without_being_read(self):
         repository = self.make_repository("synthetic-java-service")
@@ -94,6 +139,33 @@ class LandscapeTest(unittest.TestCase):
             item.get("source", {}).get("path") for item in inventory["observations"]
         }
         self.assertNotIn(".env", source_paths)
+
+    def test_outbound_port_package_is_not_treated_as_build_output(self):
+        repository = self.make_repository("synthetic-java-service")
+        outbound = (
+            repository
+            / "src/main/java/com/example/mercurio/customer/port/out/CustomerPublisher.java"
+        )
+        outbound.parent.mkdir(parents=True)
+        outbound.write_text("interface CustomerPublisher {}\n", encoding="utf-8")
+        build_output = repository / "out/generated.txt"
+        build_output.parent.mkdir()
+        build_output.write_text("generated\n", encoding="utf-8")
+        git(repository, "add", ".")
+        git(repository, "commit", "-q", "-m", "Add outbound port and build output")
+
+        inventory = discover(repository, "synthetic-java-service")
+        self.assertEqual([], validate_inventory(inventory, source=repository))
+        source_paths = {
+            item.get("source", {}).get("path") for item in inventory["observations"]
+        }
+        self.assertIn(
+            "src/main/java/com/example/mercurio/customer/port/out/CustomerPublisher.java",
+            source_paths,
+        )
+        self.assertIn(
+            {"path": "out", "reason": "excluded-directory"}, inventory["excluded"]
+        )
 
     def test_dirty_repository_fails_preflight(self):
         repository = self.make_repository("synthetic-kotlin-service")

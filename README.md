@@ -40,6 +40,7 @@ dependencies.
 ./tools/landscape status /path/to/repository --inventory work/application-id.json
 ./tools/landscape sources validate sources.json
 ./tools/landscape sources resolve application-id --registry sources.json
+./tools/landscape evidence select work/application-id.json --source /path/to/repository --output work/application-id-evidence.json
 ```
 
 `preflight` requires an independent, clean Git repository. It reports Copilot
@@ -60,6 +61,12 @@ Copilot customizations match the approved digest.
 
 The full source-resolution and Copilot-approval rules are documented in
 `docs/contracts/slice-2.md`.
+
+Discovery also emits bounded literal Maven and Gradle observations. Unsupported,
+dynamic, inherited, profile-dependent, or effective-model constructs remain visible as
+manifest gaps. `evidence select` revalidates the inventory and clean source commit,
+reapplies safety exclusions, and writes a bounded, contract-validated evidence bundle.
+The exact supported forms and limits are documented in `docs/contracts/slice-3.md`.
 
 ## Validation
 
