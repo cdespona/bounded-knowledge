@@ -15,10 +15,13 @@ from landscape_core.contracts import (  # noqa: E402
     artifact_id,
     validate_candidate_envelope,
     validate_evidence_bundle,
+    validate_landscape_catalog,
     validate_manifest_observation,
     validate_source_registry,
     validate_source_resolution,
+    validate_source_topology,
 )
+from landscape_core.candidates import validate_candidate  # noqa: E402
 from landscape_core.observations import observation  # noqa: E402
 from landscape_core.validation import validate_inventory  # noqa: E402
 
@@ -95,6 +98,229 @@ class ContractTest(unittest.TestCase):
             validate_candidate_envelope(load("candidate-envelope.invalid.json"), bundle)
         )
 
+    def test_landscape_catalog_examples(self):
+        self.assertEqual([], validate_landscape_catalog(
+            load("landscape-catalog.valid.json")
+        ))
+        self.assertTrue(validate_landscape_catalog(
+            load("landscape-catalog.invalid.json")
+        ))
+
+    def test_source_topology_examples_and_reference_binding(self):
+        topology = load("source-topology.valid.json")
+        sources = {
+            "schemaVersion": 1,
+            "repositories": [
+                {
+                    "enabled": True,
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "path": "/tmp/bounded-knowledge/" + item["id"],
+                }
+                for item in topology["repositories"]
+            ],
+        }
+        catalog = load("landscape-catalog.valid.json")
+        self.assertEqual([], validate_source_topology(topology, sources, catalog))
+        self.assertTrue(validate_source_topology(
+            load("source-topology.invalid.json"), sources, catalog
+        ))
+
+        shared = [
+            item for item in topology["bindings"]
+            if item["sourceSelectionId"] == "shared-team-workloads"
+        ]
+        self.assertEqual(4, len(shared))
+        self.assertEqual(
+            {"customer-management", "order-management", "customer-api", "order-api"},
+            {item["target"]["id"] for item in shared},
+        )
+
+    def test_catalog_and_topology_reject_invalid_references_and_ordering(self):
+        catalog = load("landscape-catalog.valid.json")
+        catalog["relationships"][0]["target"]["entityId"] = "missing-deployable"
+        self.assertTrue(any(
+            "unknown entity" in error
+            for error in validate_landscape_catalog(catalog)
+        ))
+
+        topology = load("source-topology.valid.json")
+        topology["sourceSelections"] = list(reversed(topology["sourceSelections"]))
+        sources = {
+            "schemaVersion": 1,
+            "repositories": [
+                {
+                    "enabled": True,
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "path": "/tmp/bounded-knowledge/" + item["id"],
+                }
+                for item in topology["repositories"]
+            ],
+        }
+        errors = validate_source_topology(
+            topology, sources, load("landscape-catalog.valid.json")
+        )
+        self.assertTrue(any("sourceSelections must be sorted" in error for error in errors))
+
+    def test_catalog_and_topology_nested_malformed_values_fail_closed(self):
+        catalog_cases = (
+            lambda value: value["applications"][0]["assessment"].update(status=[]),
+            lambda value: value["deployables"][0].update(kind=[]),
+            lambda value: value["relationships"][0].update(type=[]),
+            lambda value: value["relationships"][0]["source"].update(entityType=[]),
+        )
+        for mutate in catalog_cases:
+            catalog = load("landscape-catalog.valid.json")
+            mutate(catalog)
+            self.assertTrue(validate_landscape_catalog(catalog))
+
+        topology_cases = (
+            lambda value: value["repositories"][0].update(kind=[]),
+            lambda value: value["sourceSelections"][0].update(repositoryId=[]),
+            lambda value: value["bindings"][0]["target"].update(type=[]),
+            lambda value: value["bindings"][0].update(status=[]),
+        )
+        for mutate in topology_cases:
+            topology = load("source-topology.valid.json")
+            mutate(topology)
+            self.assertTrue(validate_source_topology(topology))
+
+    def test_catalog_and_topology_operational_rules_match_schema_constraints(self):
+        catalog = load("landscape-catalog.valid.json")
+        catalog["schemaVersion"] = True
+        self.assertTrue(validate_landscape_catalog(catalog))
+
+        catalog = load("landscape-catalog.valid.json")
+        catalog["strategicCapabilities"][0]["desiredOutcomes"] = []
+        self.assertTrue(validate_landscape_catalog(catalog))
+
+        catalog = load("landscape-catalog.valid.json")
+        unknown = next(
+            item for item in catalog["relationships"]
+            if item["assessment"]["status"] == "unknown"
+        )
+        unknown["assessment"]["missingEvidence"] = []
+        self.assertTrue(validate_landscape_catalog(catalog))
+
+        for subpath in ("team folder", "team:folder", "tëam/folder"):
+            topology = load("source-topology.valid.json")
+            topology["sourceSelections"][0]["subpath"] = subpath
+            self.assertTrue(validate_source_topology(topology), subpath)
+
+        topology = load("source-topology.valid.json")
+        topology["schemaVersion"] = True
+        self.assertTrue(validate_source_topology(topology))
+
+    def test_strategy_requires_curated_support(self):
+        catalog = load("landscape-catalog.valid.json")
+        capability = catalog["strategicCapabilities"][0]
+        capability["assessment"]["evidence"] = [
+            load("landscape-catalog.valid.json")["applications"][0]["assessment"][
+                "evidence"
+            ][0]
+        ]
+        self.assertTrue(any(
+            "requires curated supporting evidence" in error
+            for error in validate_landscape_catalog(catalog)
+        ))
+
+        catalog = load("landscape-catalog.valid.json")
+        relationship = next(
+            item for item in catalog["relationships"]
+            if item["type"] == "application-contributes-to-strategic-capability"
+        )
+        relationship["assessment"]["evidence"] = [
+            catalog["applications"][0]["assessment"]["evidence"][0]
+        ]
+        self.assertTrue(any(
+            "requires curated supporting evidence" in error
+            for error in validate_landscape_catalog(catalog)
+        ))
+
+    def test_topology_rejects_dangling_catalog_evidence_references(self):
+        topology = load("source-topology.valid.json")
+        sources = {
+            "schemaVersion": 1,
+            "repositories": [
+                {
+                    "enabled": True,
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "path": "/tmp/bounded-knowledge/" + item["id"],
+                }
+                for item in topology["repositories"]
+            ],
+        }
+        catalog = load("landscape-catalog.valid.json")
+        evidence = catalog["applications"][0]["assessment"]["evidence"][0]
+        evidence["repositoryId"] = "missing-repository"
+        evidence["sourceSelectionId"] = "missing-selection"
+        errors = validate_source_topology(topology, sources, catalog)
+        self.assertTrue(any("unknown topology repository" in error for error in errors))
+        self.assertTrue(any("unknown source selection" in error for error in errors))
+
+    def test_candidate_validation_accepts_a_verified_evidence_subrange(self):
+        bundle = load("evidence-bundle.valid.json")
+        bundle["selectedEvidence"][0]["lines"] = "5-10"
+        bundle["id"] = artifact_id(bundle)
+        candidate = load("candidate-envelope.valid.json")
+        candidate["evidenceBundleId"] = bundle["id"]
+        candidate["proposedProfile"]["claims"][0]["evidence"][0]["lines"] = "6"
+
+        self.assertEqual([], validate_candidate(candidate, bundle))
+
+    def test_candidate_validation_rejects_unverifiable_references_and_statuses(self):
+        bundle = load("evidence-bundle.valid.json")
+        cases = {
+            "kind": lambda candidate: candidate.update(kind="terraform"),
+            "path": lambda candidate: candidate["proposedProfile"]["claims"][0][
+                "evidence"
+            ][0].update(path="src/Other.java"),
+            "commit": lambda candidate: candidate["proposedProfile"]["claims"][0][
+                "evidence"
+            ][0].update(commit="b" * 40),
+            "observation": lambda candidate: candidate["proposedProfile"]["claims"][0][
+                "evidence"
+            ][0].update(observationId="d" * 64),
+            "lines": lambda candidate: candidate["proposedProfile"]["claims"][0][
+                "evidence"
+            ][0].update(lines="6"),
+            "status": lambda candidate: candidate["proposedProfile"]["claims"][0].update(
+                status="asserted"
+            ),
+            "malformed-status": lambda candidate: candidate["proposedProfile"]["claims"][
+                0
+            ].update(status=[]),
+            "malformed-path": lambda candidate: candidate["proposedProfile"]["claims"][0][
+                "evidence"
+            ][0].update(path=[]),
+            "malformed-observation": lambda candidate: candidate["proposedProfile"][
+                "claims"
+            ][0]["evidence"][0].update(observationId=[]),
+        }
+        for name, mutate in cases.items():
+            candidate = load("candidate-envelope.valid.json")
+            mutate(candidate)
+            with self.subTest(name=name):
+                self.assertTrue(validate_candidate(candidate, bundle))
+
+        candidate = load("candidate-envelope.valid.json")
+        claim = candidate["proposedProfile"]["claims"][0]
+        claim["status"] = "inferred"
+        claim["evidence"] = []
+        self.assertTrue(any(
+            "inferred claims require evidence" in error
+            for error in validate_candidate(candidate, bundle)
+        ))
+
+    def test_candidate_validation_rejects_an_invalid_evidence_bundle_first(self):
+        bundle = load("evidence-bundle.valid.json")
+        bundle["selectedEvidence"][0]["path"] = "../pom.xml"
+        errors = validate_candidate(load("candidate-envelope.valid.json"), bundle)
+        self.assertTrue(errors)
+        self.assertTrue(all(error.startswith("evidence bundle: ") for error in errors))
+
     def test_malformed_top_level_values_fail_closed(self):
         validators = (
             validate_manifest_observation,
@@ -102,6 +328,8 @@ class ContractTest(unittest.TestCase):
             validate_source_resolution,
             validate_evidence_bundle,
             validate_candidate_envelope,
+            validate_landscape_catalog,
+            validate_source_topology,
         )
         for validator in validators:
             for value in (None, [], "invalid", 1):

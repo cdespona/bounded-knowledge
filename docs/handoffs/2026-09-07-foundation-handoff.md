@@ -231,9 +231,11 @@ schemas/manifest-observation.schema.json
 schemas/source-resolution.schema.json
 schemas/evidence-bundle.schema.json
 schemas/candidate-envelope.schema.json
+.github/agents/repository-cartographer.agent.md
 tools/landscape
 tools/landscape_core/
 tools/landscape_core/contracts.py
+tools/landscape_core/candidates.py
 tools/landscape_core/sources.py
 tools/landscape_core/evidence.py
 tools/detectors/git.py
@@ -251,6 +253,7 @@ examples/contracts/
 docs/contracts/slice-1.md
 docs/contracts/slice-2.md
 docs/contracts/slice-3.md
+docs/contracts/slice-4.md
 work/.gitkeep
 workflows/.gitkeep
 ```
@@ -278,6 +281,9 @@ The deterministic tool currently supports:
 ./tools/landscape evidence select work/application-id.json \
   --source /path/to/repository \
   --output work/application-id-evidence.json
+
+./tools/landscape candidate validate work/application-id-candidate.json \
+  --evidence work/application-id-evidence.json
 ```
 
 The initial implementation deliberately uses Python 3.9 standard library only because
@@ -294,8 +300,8 @@ The actual test command is:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v
 ```
 
-Thirty-six tests pass: nine foundation and detector tests, nine subprocess-level CLI
-acceptance tests, nine persisted-contract tests, and nine source-resolution tests.
+Forty tests pass: nine foundation and detector tests, ten subprocess-level CLI acceptance
+tests, twelve persisted-contract tests, and nine source-resolution tests.
 
 Latest Slice 3 validation on 2026-09-09:
 
@@ -346,8 +352,8 @@ The CLI acceptance suite now protects the complete current command surface, incl
 - Java and Kotlin files are classified but not semantically analyzed.
 - `sources.json` is a local, user-owned registry input. Slice 3 does not alter it or
   analyze any configured private repository.
-- The observation inventory has an operational dependency-free validator. Claim and
-  repository-profile schemas are not yet connected to a workflow.
+- Claim and repository-profile contracts have a dependency-free operational validator;
+  Conductor has not yet been connected to it.
 - No Conductor workflow has been created.
 - No private repository has been requested or analyzed.
 
@@ -441,10 +447,16 @@ fallback, and known gaps are documented in `docs/contracts/slice-3.md`.
 
 ### Slice 4: candidate validation and direct Copilot trial
 
-Connect the claim and repository-profile contracts to dependency-free operational
-validators. Run the read-only repository cartographer directly against both synthetic
-repositories before adding orchestration. Reject evidence paths, commits, observation
-references, statuses, or line ranges that cannot be verified from the selected bundle.
+The deterministic implementation was completed on 2026-09-09. The candidate CLI validates
+the evidence bundle before binding the candidate envelope, repository profile, claims,
+statuses, commits, paths, observation references, and contained line ranges. The repository
+cartographer exposes only Copilot's read-only `view` tool and consumes one explicit evidence
+bundle. Exact validation and trial commands are documented in `docs/contracts/slice-4.md`.
+
+The direct Java and Kotlin trials remain the completion gate. The first local invocation
+stopped before analysis because GitHub Copilot CLI had no valid authentication; no model
+candidate was produced. Re-authenticate Copilot, run both commands in the Slice 4 contract,
+and retain the generated artifacts only under ignored `work/`.
 
 ### Slice 5: Conductor and promotion
 
@@ -483,8 +495,9 @@ against the current working tree. Preserve independent source-repository boundar
 keep all repository artifacts in English. Do not request or analyze private application
 repositories yet.
 
-Slices 1 through 3 are implemented. Review `docs/contracts/slice-1.md` through
-`docs/contracts/slice-3.md`, their schemas, validators, fixtures, and acceptance tests.
-The next proposed milestone is Slice 4: candidate validation and a direct read-only
-Copilot trial. Do not implement Conductor workflows or promotion as part of that slice.
+Slices 1 through 3 and the deterministic portion of Slice 4 are implemented. Review
+`docs/contracts/slice-1.md` through `docs/contracts/slice-4.md`, their schemas, validators,
+fixtures, and acceptance tests. Complete Slice 4 by authenticating Copilot CLI and running
+the documented direct read-only trials against both synthetic evidence bundles. Do not
+implement Conductor workflows or promotion as part of that slice.
 ```

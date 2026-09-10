@@ -1,0 +1,478 @@
+{
+  "applications": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "kind": "repository",
+            "lines": "10-22",
+            "observationId": "6666666666666666666666666666666666666666666666666666666666666666",
+            "path": "src/main/java/example/customers/CustomerApplication.java",
+            "repositoryId": "customer-service",
+            "sourceSelectionId": "customer-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "customer-management",
+      "name": "Customer Management",
+      "purpose": "Maintain the customer information needed to fulfil orders."
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "12-24",
+            "observationId": "1111111111111111111111111111111111111111111111111111111111111111",
+            "path": "src/main/java/example/orders/OrderApplication.java",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "order-management",
+      "name": "Order Management",
+      "purpose": "Accept and coordinate customer orders through fulfilment."
+    }
+  ],
+  "boundedContexts": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "medium",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "kind": "curated",
+            "locator": "Bounded context discussion",
+            "recordedAt": "2026-09-10T10:00:00Z",
+            "sourceId": "strategy-interview-2026-09-10",
+            "sourceType": "interview",
+            "suppliedBy": "Technical lead"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "description": "Coordinates an accepted order until it is ready for downstream fulfilment.",
+      "id": "order-fulfilment",
+      "name": "Order Fulfilment"
+    }
+  ],
+  "deployables": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "kind": "repository",
+            "lines": "8",
+            "observationId": "7777777777777777777777777777777777777777777777777777777777777777",
+            "path": "build.gradle",
+            "repositoryId": "customer-service",
+            "sourceSelectionId": "customer-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "customer-api",
+      "kind": "service",
+      "name": "Customer API"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "12",
+            "observationId": "2222222222222222222222222222222222222222222222222222222222222222",
+            "path": "build.gradle",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "order-api",
+      "kind": "service",
+      "name": "Order API"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "medium",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "8-19",
+            "observationId": "3333333333333333333333333333333333333333333333333333333333333333",
+            "path": "src/main/java/example/orders/expiry/ExpiryWorker.java",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "status": "inferred"
+      },
+      "id": "order-expiry-worker",
+      "kind": "scheduled-process",
+      "name": "Order Expiry Worker"
+    }
+  ],
+  "openQuestions": [
+    "Does reservation have the same meaning in the Inventory bounded context?",
+    "Should domain experts confirm the inferred Order Expiry Worker boundary?"
+  ],
+  "relationships": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "kind": "repository",
+            "lines": "10-22",
+            "observationId": "6666666666666666666666666666666666666666666666666666666666666666",
+            "path": "src/main/java/example/customers/CustomerApplication.java",
+            "repositoryId": "customer-service",
+            "sourceSelectionId": "customer-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "customer-management-comprises-customer-api",
+      "source": {
+        "entityId": "customer-management",
+        "entityType": "application"
+      },
+      "statement": "Customer Management comprises the Customer API deployable.",
+      "target": {
+        "entityId": "customer-api",
+        "entityType": "deployable"
+      },
+      "type": "application-comprises-deployable"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "12-24",
+            "observationId": "1111111111111111111111111111111111111111111111111111111111111111",
+            "path": "src/main/java/example/orders/OrderApplication.java",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "order-management-comprises-order-api",
+      "source": {
+        "entityId": "order-management",
+        "entityType": "application"
+      },
+      "statement": "Order Management comprises the Order API deployable.",
+      "target": {
+        "entityId": "order-api",
+        "entityType": "deployable"
+      },
+      "type": "application-comprises-deployable"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "medium",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "8-19",
+            "observationId": "3333333333333333333333333333333333333333333333333333333333333333",
+            "path": "src/main/java/example/orders/expiry/ExpiryWorker.java",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "status": "inferred"
+      },
+      "id": "order-management-comprises-order-expiry-worker",
+      "source": {
+        "entityId": "order-management",
+        "entityType": "application"
+      },
+      "statement": "Order Management appears to comprise the Order Expiry Worker deployable.",
+      "target": {
+        "entityId": "order-expiry-worker",
+        "entityType": "deployable"
+      },
+      "type": "application-comprises-deployable"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "medium",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "kind": "curated",
+            "locator": "Capability mapping",
+            "recordedAt": "2026-09-10T10:00:00Z",
+            "sourceId": "strategy-interview-2026-09-10",
+            "sourceType": "interview",
+            "suppliedBy": "Technical lead"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "order-management-contributes-to-faster-fulfilment",
+      "source": {
+        "entityId": "order-management",
+        "entityType": "application"
+      },
+      "statement": "Order Management contributes to faster fulfilment by coordinating order progress.",
+      "target": {
+        "entityId": "faster-fulfilment",
+        "entityType": "strategic-capability"
+      },
+      "type": "application-contributes-to-strategic-capability"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "medium",
+        "counterevidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "5-16",
+            "observationId": "4444444444444444444444444444444444444444444444444444444444444444",
+            "path": "src/main/java/example/orders/billing/BillingAdapter.java",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "evidence": [
+          {
+            "kind": "curated",
+            "locator": "Bounded context discussion",
+            "recordedAt": "2026-09-10T10:00:00Z",
+            "sourceId": "strategy-interview-2026-09-10",
+            "sourceType": "interview",
+            "suppliedBy": "Technical lead"
+          }
+        ],
+        "status": "inferred"
+      },
+      "id": "order-management-participates-in-order-fulfilment",
+      "source": {
+        "entityId": "order-management",
+        "entityType": "application"
+      },
+      "statement": "Order Management primarily participates in Order Fulfilment, with a billing boundary requiring review.",
+      "target": {
+        "entityId": "order-fulfilment",
+        "entityType": "bounded-context"
+      },
+      "type": "application-participates-in-bounded-context"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "30-41",
+            "observationId": "5555555555555555555555555555555555555555555555555555555555555555",
+            "path": "src/main/java/example/orders/OrderService.java",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "order-management-supports-place-order",
+      "source": {
+        "entityId": "order-management",
+        "entityType": "application"
+      },
+      "statement": "Order Management supports placing an order.",
+      "target": {
+        "entityId": "place-order",
+        "entityType": "use-case"
+      },
+      "type": "application-supports-use-case"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "medium",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "kind": "curated",
+            "locator": "Order definition",
+            "recordedAt": "2026-09-10T10:00:00Z",
+            "sourceId": "strategy-interview-2026-09-10",
+            "sourceType": "interview",
+            "suppliedBy": "Technical lead"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "order-fulfilment-defines-order",
+      "source": {
+        "entityId": "order-fulfilment",
+        "entityType": "bounded-context"
+      },
+      "statement": "Order has its recorded meaning within Order Fulfilment.",
+      "target": {
+        "entityId": "order-fulfilment-order",
+        "entityType": "term"
+      },
+      "type": "bounded-context-defines-term"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "low",
+        "counterevidence": [],
+        "evidence": [],
+        "missingEvidence": [
+          "A domain expert must confirm whether reservation belongs to Order Fulfilment."
+        ],
+        "status": "unknown"
+      },
+      "id": "order-fulfilment-defines-reservation",
+      "source": {
+        "entityId": "order-fulfilment",
+        "entityType": "bounded-context"
+      },
+      "statement": "It is not yet known whether Reservation is defined by Order Fulfilment.",
+      "target": {
+        "entityId": "order-fulfilment-reservation",
+        "entityType": "term"
+      },
+      "type": "bounded-context-defines-term"
+    }
+  ],
+  "schemaVersion": 1,
+  "strategicCapabilities": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "kind": "curated",
+            "locator": "Capability mapping",
+            "recordedAt": "2026-09-10T10:00:00Z",
+            "sourceId": "strategy-interview-2026-09-10",
+            "sourceType": "interview",
+            "suppliedBy": "Technical lead"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "desiredOutcomes": [
+        "Reduce the time from order acceptance to fulfilment readiness."
+      ],
+      "id": "faster-fulfilment",
+      "name": "Faster Fulfilment",
+      "priority": "high",
+      "statement": "Shorten order lead time without reducing correctness.",
+      "timeHorizon": "2026",
+      "type": "capability"
+    }
+  ],
+  "terms": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "medium",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "kind": "curated",
+            "locator": "Order definition",
+            "recordedAt": "2026-09-10T10:00:00Z",
+            "sourceId": "strategy-interview-2026-09-10",
+            "sourceType": "interview",
+            "suppliedBy": "Technical lead"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "definition": "A customer's accepted request for fulfilment within the Order Fulfilment context.",
+      "id": "order-fulfilment-order",
+      "name": "Order"
+    },
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "low",
+        "counterevidence": [],
+        "evidence": [],
+        "missingEvidence": [
+          "The owning bounded context and approved business definition are not confirmed."
+        ],
+        "status": "unknown"
+      },
+      "definition": "A provisional allocation whose precise domain ownership is unresolved.",
+      "id": "order-fulfilment-reservation",
+      "name": "Reservation"
+    }
+  ],
+  "useCases": [
+    {
+      "actor": "Customer",
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [
+          {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "repository",
+            "lines": "30-41",
+            "observationId": "5555555555555555555555555555555555555555555555555555555555555555",
+            "path": "src/main/java/example/orders/OrderService.java",
+            "repositoryId": "order-service",
+            "sourceSelectionId": "order-service-root"
+          }
+        ],
+        "status": "confirmed"
+      },
+      "id": "place-order",
+      "name": "Place Order",
+      "outcome": "The customer's request is accepted for fulfilment."
+    }
+  ]
+}

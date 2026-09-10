@@ -6,7 +6,12 @@ from pathlib import Path
 import re
 import sys
 
-from .contracts import validate_source_registry
+from .contracts import (
+    validate_landscape_catalog,
+    validate_source_registry,
+    validate_source_topology,
+)
+from .candidates import validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
 from .git_repository import RepositoryError, commit_sha, require_repository_root
@@ -80,6 +85,42 @@ def build_parser():
     evidence_select_parser.add_argument("inventory")
     evidence_select_parser.add_argument("--source", required=True)
     evidence_select_parser.add_argument("--output", required=True)
+
+    candidate_parser = subparsers.add_parser(
+        "candidate", help="validate model-produced candidate profiles"
+    )
+    candidate_subparsers = candidate_parser.add_subparsers(
+        dest="candidate_command", required=True
+    )
+    candidate_validate_parser = candidate_subparsers.add_parser(
+        "validate", help="validate a candidate against an evidence bundle"
+    )
+    candidate_validate_parser.add_argument("candidate")
+    candidate_validate_parser.add_argument("--evidence", required=True)
+
+    catalog_parser = subparsers.add_parser(
+        "catalog", help="validate canonical landscape knowledge"
+    )
+    catalog_subparsers = catalog_parser.add_subparsers(
+        dest="catalog_command", required=True
+    )
+    catalog_validate_parser = catalog_subparsers.add_parser(
+        "validate", help="validate a landscape catalog"
+    )
+    catalog_validate_parser.add_argument("catalog")
+
+    topology_parser = subparsers.add_parser(
+        "topology", help="validate logical source selections and bindings"
+    )
+    topology_subparsers = topology_parser.add_subparsers(
+        dest="topology_command", required=True
+    )
+    topology_validate_parser = topology_subparsers.add_parser(
+        "validate", help="validate source topology against sources and catalog"
+    )
+    topology_validate_parser.add_argument("topology")
+    topology_validate_parser.add_argument("--sources", required=True)
+    topology_validate_parser.add_argument("--catalog", required=True)
     return parser
 
 
@@ -133,6 +174,27 @@ def main(argv=None):
             inventory = json.loads(Path(args.inventory).read_text(encoding="utf-8"))
             _write_json(select_evidence(inventory, args.source), output=args.output)
             return 0
+
+        if args.command == "candidate" and args.candidate_command == "validate":
+            candidate = json.loads(Path(args.candidate).read_text(encoding="utf-8"))
+            evidence = json.loads(Path(args.evidence).read_text(encoding="utf-8"))
+            errors = validate_candidate(candidate, evidence)
+            _write_json({"valid": not errors, "errors": errors})
+            return 0 if not errors else 1
+
+        if args.command == "catalog" and args.catalog_command == "validate":
+            catalog = json.loads(Path(args.catalog).read_text(encoding="utf-8"))
+            errors = validate_landscape_catalog(catalog)
+            _write_json({"valid": not errors, "errors": errors})
+            return 0 if not errors else 1
+
+        if args.command == "topology" and args.topology_command == "validate":
+            topology = json.loads(Path(args.topology).read_text(encoding="utf-8"))
+            sources = json.loads(Path(args.sources).read_text(encoding="utf-8"))
+            catalog = json.loads(Path(args.catalog).read_text(encoding="utf-8"))
+            errors = validate_source_topology(topology, sources, catalog)
+            _write_json({"valid": not errors, "errors": errors})
+            return 0 if not errors else 1
     except (OSError, ValueError, RepositoryError, json.JSONDecodeError) as error:
         sys.stderr.write("error: {}\n".format(error))
         return 1

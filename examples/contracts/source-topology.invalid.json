@@ -1,0 +1,31 @@
+{
+  "bindings": [
+    {
+      "provenance": {
+        "detail": "The mapping was supplied manually.",
+        "method": "manual"
+      },
+      "sourceSelectionId": "unsafe-selection",
+      "status": "confirmed",
+      "target": {
+        "id": "Customer-Management",
+        "type": "application"
+      }
+    }
+  ],
+  "repositories": [
+    {
+      "id": "kubernetes-platform",
+      "kind": "kubernetes"
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceSelections": [
+    {
+      "id": "unsafe-selection",
+      "kind": "kubernetes",
+      "repositoryId": "kubernetes-platform",
+      "subpath": "../secrets"
+    }
+  ]
+}

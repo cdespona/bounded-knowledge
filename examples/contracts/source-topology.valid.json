@@ -1,0 +1,157 @@
+{
+  "bindings": [
+    {
+      "provenance": {
+        "detail": "The technical lead mapped the application repository explicitly.",
+        "method": "manual"
+      },
+      "sourceSelectionId": "customer-service-root",
+      "status": "declared",
+      "target": {
+        "id": "customer-management",
+        "type": "application"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The technical lead mapped the deployable to its source root.",
+        "method": "manual"
+      },
+      "sourceSelectionId": "customer-service-root",
+      "status": "declared",
+      "target": {
+        "id": "customer-api",
+        "type": "deployable"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The technical lead mapped the application repository explicitly.",
+        "method": "manual"
+      },
+      "sourceSelectionId": "order-service-root",
+      "status": "declared",
+      "target": {
+        "id": "order-management",
+        "type": "application"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The technical lead mapped the deployable to its source root.",
+        "method": "manual"
+      },
+      "sourceSelectionId": "order-service-root",
+      "status": "declared",
+      "target": {
+        "id": "order-api",
+        "type": "deployable"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The folder name associates the shared workload folder with this application.",
+        "method": "folder-convention"
+      },
+      "sourceSelectionId": "shared-team-workloads",
+      "status": "inferred",
+      "target": {
+        "id": "customer-management",
+        "type": "application"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The folder name associates the shared workload folder with this application.",
+        "method": "folder-convention"
+      },
+      "sourceSelectionId": "shared-team-workloads",
+      "status": "inferred",
+      "target": {
+        "id": "order-management",
+        "type": "application"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The folder name suggests that the shared manifests include this deployable.",
+        "method": "folder-convention"
+      },
+      "sourceSelectionId": "shared-team-workloads",
+      "status": "inferred",
+      "target": {
+        "id": "customer-api",
+        "type": "deployable"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The folder name suggests that the shared manifests include this deployable.",
+        "method": "folder-convention"
+      },
+      "sourceSelectionId": "shared-team-workloads",
+      "status": "inferred",
+      "target": {
+        "id": "order-api",
+        "type": "deployable"
+      }
+    },
+    {
+      "provenance": {
+        "detail": "The technical lead mapped the Terraform folder explicitly.",
+        "method": "manual"
+      },
+      "sourceSelectionId": "terraform-customer-management",
+      "status": "declared",
+      "target": {
+        "id": "customer-management",
+        "type": "application"
+      }
+    }
+  ],
+  "repositories": [
+    {
+      "id": "customer-service",
+      "kind": "application"
+    },
+    {
+      "id": "kubernetes-platform",
+      "kind": "kubernetes"
+    },
+    {
+      "id": "order-service",
+      "kind": "application"
+    },
+    {
+      "id": "terraform-platform",
+      "kind": "terraform"
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceSelections": [
+    {
+      "id": "customer-service-root",
+      "kind": "application",
+      "repositoryId": "customer-service",
+      "subpath": "."
+    },
+    {
+      "id": "order-service-root",
+      "kind": "application",
+      "repositoryId": "order-service",
+      "subpath": "."
+    },
+    {
+      "id": "shared-team-workloads",
+      "kind": "kubernetes",
+      "repositoryId": "kubernetes-platform",
+      "subpath": "apps/team-shared/workloads"
+    },
+    {
+      "id": "terraform-customer-management",
+      "kind": "terraform",
+      "repositoryId": "terraform-platform",
+      "subpath": "teams/customer-management"
+    }
+  ]
+}

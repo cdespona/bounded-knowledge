@@ -21,6 +21,29 @@ MANIFEST_KINDS = {
     "build-module",
     "manifest-gap",
 }
+CATALOG_COLLECTION_TYPES = {
+    "applications": "application",
+    "deployables": "deployable",
+    "boundedContexts": "bounded-context",
+    "useCases": "use-case",
+    "terms": "term",
+    "strategicCapabilities": "strategic-capability",
+}
+CATALOG_RELATIONSHIPS = {
+    "application-comprises-deployable": ("application", "deployable"),
+    "application-participates-in-bounded-context": (
+        "application", "bounded-context"
+    ),
+    "application-supports-use-case": ("application", "use-case"),
+    "bounded-context-defines-term": ("bounded-context", "term"),
+    "application-contributes-to-strategic-capability": (
+        "application", "strategic-capability"
+    ),
+}
+DEPLOYABLE_KINDS = {
+    "service", "worker", "job", "function", "scheduled-process", "other"
+}
+STRATEGY_TYPES = {"objective", "capability", "principle", "constraint", "initiative"}
 
 
 def artifact_id(document):
@@ -54,6 +77,11 @@ def _valid_lines(value):
         return False
     parts = value.split("-", 1)
     return len(parts) == 1 or int(parts[0]) <= int(parts[1])
+
+
+def _line_bounds(value):
+    parts = value.split("-", 1)
+    return int(parts[0]), int(parts[-1])
 
 
 def _is_datetime(value):
@@ -431,7 +459,8 @@ def validate_candidate_envelope(document, evidence_bundle=None):
             claim_ids.add(claim_id)
         if not _is_non_empty_string(claim["statement"]):
             errors.append("{}.statement must be non-empty".format(prefix))
-        if not isinstance(claim["status"], str) or claim["status"] not in {
+        status = claim["status"]
+        if not isinstance(status, str) or status not in {
             "confirmed", "inferred", "unknown"
         }:
             errors.append("{}.status is invalid".format(prefix))
@@ -441,9 +470,9 @@ def validate_candidate_envelope(document, evidence_bundle=None):
             errors.append("{}.confidence is invalid".format(prefix))
         if not _is_datetime(claim["analyzedAt"]):
             errors.append("{}.analyzedAt must be a timezone-aware date-time".format(prefix))
-        if claim["status"] == "confirmed" and not claim["evidence"]:
-            errors.append("{} confirmed claims require evidence".format(prefix))
-        if claim["status"] == "unknown" and not claim.get("missingEvidence"):
+        if status in ("confirmed", "inferred") and not claim["evidence"]:
+            errors.append("{} {} claims require evidence".format(prefix, status))
+        if status == "unknown" and not claim.get("missingEvidence"):
             errors.append("{} unknown claims require missingEvidence".format(prefix))
         if "missingEvidence" in claim and (
             not isinstance(claim["missingEvidence"], list)
@@ -474,20 +503,39 @@ def validate_candidate_envelope(document, evidence_bundle=None):
                     not isinstance(observation_id, str) or not SHA256.fullmatch(observation_id)
                 ):
                     errors.append("{}.observationId is invalid".format(evidence_prefix))
+                if "lines" not in item:
+                    errors.append("{}.lines is required for bundle verification".format(
+                        evidence_prefix
+                    ))
+                if "observationId" not in item:
+                    errors.append(
+                        "{}.observationId is required for bundle verification".format(
+                            evidence_prefix
+                        )
+                    )
 
     if evidence_bundle is not None:
         if document["evidenceBundleId"] != evidence_bundle.get("id"):
             errors.append("evidenceBundleId does not match the supplied bundle")
-        if (
-            repository != evidence_bundle.get("repository")
-            or commit != evidence_bundle.get("commit")
-        ):
-            errors.append("candidate repository or commit does not match the supplied bundle")
-        selected = {
-            (item["path"], item["lines"], observation_id)
-            for item in evidence_bundle.get("selectedEvidence", [])
-            for observation_id in item.get("observationIds", [])
-        }
+        if repository != evidence_bundle.get("repository"):
+            errors.append("candidate repository does not match the supplied bundle")
+        if kind != evidence_bundle.get("kind"):
+            errors.append("candidate kind does not match the supplied bundle")
+        if commit != evidence_bundle.get("commit"):
+            errors.append("candidate commit does not match the supplied bundle")
+        selected = {}
+        for item in evidence_bundle.get("selectedEvidence", []):
+            if not isinstance(item, dict):
+                continue
+            path = item.get("path")
+            lines = item.get("lines")
+            observation_ids = item.get("observationIds", [])
+            if (
+                isinstance(path, str)
+                and _valid_lines(lines)
+                and isinstance(observation_ids, list)
+            ):
+                selected.setdefault(path, []).append((lines, set(observation_ids)))
         for index, claim in enumerate(claims):
             if not isinstance(claim, dict):
                 continue
@@ -495,11 +543,522 @@ def validate_candidate_envelope(document, evidence_bundle=None):
                 for item in claim.get(field, []):
                     if not isinstance(item, dict):
                         continue
-                    key = (item.get("path"), item.get("lines"), item.get("observationId"))
-                    if key not in selected:
+                    path = item.get("path")
+                    lines = item.get("lines")
+                    observation_id = item.get("observationId")
+                    matched = False
+                    if (
+                        isinstance(path, str)
+                        and _valid_lines(lines)
+                        and isinstance(observation_id, str)
+                    ):
+                        reference_start, reference_end = _line_bounds(lines)
+                        for selected_lines, observation_ids in selected.get(path, []):
+                            selected_start, selected_end = _line_bounds(selected_lines)
+                            if (
+                                selected_start <= reference_start <= reference_end <= selected_end
+                                and observation_id in observation_ids
+                            ):
+                                matched = True
+                                break
+                    if not matched:
                         message = (
                             "proposedProfile.claims[{}].{} references evidence outside "
                             "the bundle"
                         ).format(index, field)
                         errors.append(message)
+    return errors
+
+
+def _sorted_unique_strings(value):
+    return (
+        isinstance(value, list)
+        and all(_is_non_empty_string(item) for item in value)
+        and value == sorted(set(value))
+    )
+
+
+def _knowledge_evidence_key(value):
+    if not isinstance(value, dict):
+        return ("", json.dumps(value, sort_keys=True))
+    if value.get("kind") == "repository":
+        return (
+            "repository",
+            str(value.get("repositoryId", "")),
+            str(value.get("commit", "")),
+            str(value.get("path", "")),
+            str(value.get("lines", "")),
+            str(value.get("observationId", "")),
+            str(value.get("sourceSelectionId", "")),
+        )
+    return (
+        str(value.get("kind", "")),
+        str(value.get("sourceId", "")),
+        str(value.get("sourceType", "")),
+        str(value.get("recordedAt", "")),
+        str(value.get("locator", "")),
+        str(value.get("suppliedBy", "")),
+    )
+
+
+def _validate_knowledge_evidence(value, prefix):
+    if not isinstance(value, dict):
+        return ["{} must be an object".format(prefix)]
+    errors = []
+    kind = value.get("kind")
+    if kind == "repository":
+        required = {"kind", "repositoryId", "commit", "path"}
+        optional = {"sourceSelectionId", "lines", "observationId"}
+        if not _exact_fields(value, required, optional):
+            return ["{} has invalid repository evidence fields".format(prefix)]
+        for field in ("repositoryId", "sourceSelectionId"):
+            if field in value and (
+                not isinstance(value[field], str)
+                or not REPOSITORY_ID.fullmatch(value[field])
+            ):
+                errors.append("{}.{} must be lowercase kebab-case".format(prefix, field))
+        if not isinstance(value["commit"], str) or not SHA.fullmatch(value["commit"]):
+            errors.append("{}.commit must be a full hexadecimal Git SHA".format(prefix))
+        errors.extend(validate_source_reference(
+            {key: value[key] for key in ("path", "lines") if key in value},
+            prefix,
+        ))
+        observation_id = value.get("observationId")
+        if observation_id is not None and (
+            not isinstance(observation_id, str) or not SHA256.fullmatch(observation_id)
+        ):
+            errors.append("{}.observationId is invalid".format(prefix))
+    elif kind == "curated":
+        required = {"kind", "sourceId", "sourceType", "suppliedBy", "recordedAt"}
+        if not _exact_fields(value, required, {"locator"}):
+            return ["{} has invalid curated evidence fields".format(prefix)]
+        if not isinstance(value["sourceId"], str) or not REPOSITORY_ID.fullmatch(
+            value["sourceId"]
+        ):
+            errors.append("{}.sourceId must be lowercase kebab-case".format(prefix))
+        if not isinstance(value["sourceType"], str) or value["sourceType"] not in {
+            "interview", "document", "approved-reference"
+        }:
+            errors.append("{}.sourceType is invalid".format(prefix))
+        if not _is_non_empty_string(value["suppliedBy"]):
+            errors.append("{}.suppliedBy must be non-empty".format(prefix))
+        if not _is_datetime(value["recordedAt"]):
+            errors.append("{}.recordedAt must be a timezone-aware date-time".format(prefix))
+        if "locator" in value and not _is_non_empty_string(value["locator"]):
+            errors.append("{}.locator must be non-empty".format(prefix))
+    else:
+        errors.append("{}.kind must be repository or curated".format(prefix))
+    return errors
+
+
+def _validate_assessment(value, prefix):
+    required = {"status", "confidence", "evidence", "counterevidence", "analyzedAt"}
+    if not _exact_fields(value, required, {"missingEvidence"}):
+        return ["{} has invalid fields".format(prefix)]
+    errors = []
+    status = value["status"]
+    if not isinstance(status, str) or status not in {"confirmed", "inferred", "unknown"}:
+        errors.append("{}.status is invalid".format(prefix))
+    if not isinstance(value["confidence"], str) or value["confidence"] not in {
+        "high", "medium", "low"
+    }:
+        errors.append("{}.confidence is invalid".format(prefix))
+    if not _is_datetime(value["analyzedAt"]):
+        errors.append("{}.analyzedAt must be a timezone-aware date-time".format(prefix))
+    for field in ("evidence", "counterevidence"):
+        items = value[field]
+        if not isinstance(items, list):
+            errors.append("{}.{} must be an array".format(prefix, field))
+            continue
+        for index, item in enumerate(items):
+            errors.extend(_validate_knowledge_evidence(
+                item, "{}.{}[{}]".format(prefix, field, index)
+            ))
+        keys = [_knowledge_evidence_key(item) for item in items]
+        if keys != sorted(keys) or len(keys) != len(set(keys)):
+            errors.append("{}.{} must be sorted and unique".format(prefix, field))
+    if isinstance(status, str) and status in {"confirmed", "inferred"} and not value["evidence"]:
+        errors.append("{} {} assessments require evidence".format(prefix, status))
+    if status == "unknown" and not value.get("missingEvidence"):
+        errors.append("{} unknown assessments require missingEvidence".format(prefix))
+    if "missingEvidence" in value and (
+        not value["missingEvidence"]
+        or not _sorted_unique_strings(value["missingEvidence"])
+    ):
+        errors.append("{}.missingEvidence must be sorted and unique".format(prefix))
+    return errors
+
+
+def _has_curated_support(value):
+    if not isinstance(value, dict):
+        return False
+    if value.get("status") == "unknown":
+        return True
+    evidence = value.get("evidence")
+    return isinstance(evidence, list) and any(
+        isinstance(item, dict) and item.get("kind") == "curated"
+        for item in evidence
+    )
+
+
+def validate_landscape_catalog(document):
+    """Validate the canonical logical landscape without resolving source topology."""
+    collections = set(CATALOG_COLLECTION_TYPES)
+    required = {"schemaVersion", "relationships", "openQuestions"} | collections
+    if not _exact_fields(document, required):
+        return ["landscape catalog has invalid fields"]
+    errors = []
+    if type(document["schemaVersion"]) is not int or document["schemaVersion"] != 1:
+        errors.append("schemaVersion must be 1")
+    entities = {}
+    all_ids = set()
+    required_fields = {
+        "applications": {"id", "name", "purpose", "assessment"},
+        "deployables": {"id", "name", "kind", "assessment"},
+        "boundedContexts": {"id", "name", "description", "assessment"},
+        "useCases": {"id", "name", "actor", "outcome", "assessment"},
+        "terms": {"id", "name", "definition", "assessment"},
+        "strategicCapabilities": {
+            "id", "name", "type", "statement", "desiredOutcomes", "assessment"
+        },
+    }
+    for collection, entity_type in CATALOG_COLLECTION_TYPES.items():
+        values = document[collection]
+        if not isinstance(values, list):
+            errors.append("{} must be an array".format(collection))
+            continue
+        order = []
+        for index, item in enumerate(values):
+            prefix = "{}[{}]".format(collection, index)
+            optional = {"timeHorizon", "priority"} if collection == "strategicCapabilities" else set()
+            if not _exact_fields(item, required_fields[collection], optional):
+                errors.append("{} has invalid fields".format(prefix))
+                continue
+            entity_id = item["id"]
+            if not isinstance(entity_id, str) or not REPOSITORY_ID.fullmatch(entity_id):
+                errors.append("{}.id must be lowercase kebab-case".format(prefix))
+            else:
+                order.append(entity_id)
+                if entity_id in all_ids:
+                    errors.append("{}.id is duplicated across the catalog".format(prefix))
+                all_ids.add(entity_id)
+                entities[(entity_type, entity_id)] = item
+            for field in required_fields[collection] - {"id", "assessment", "desiredOutcomes"}:
+                if field not in {"kind", "type"} and not _is_non_empty_string(item[field]):
+                    errors.append("{}.{} must be non-empty".format(prefix, field))
+            if collection == "deployables" and (
+                not isinstance(item["kind"], str) or item["kind"] not in DEPLOYABLE_KINDS
+            ):
+                errors.append("{}.kind is invalid".format(prefix))
+            if collection == "strategicCapabilities":
+                if not isinstance(item["type"], str) or item["type"] not in STRATEGY_TYPES:
+                    errors.append("{}.type is invalid".format(prefix))
+                if (
+                    not item["desiredOutcomes"]
+                    or not _sorted_unique_strings(item["desiredOutcomes"])
+                ):
+                    errors.append("{}.desiredOutcomes must be sorted and unique".format(prefix))
+                for field in ("timeHorizon",):
+                    if field in item and not _is_non_empty_string(item[field]):
+                        errors.append("{}.{} must be non-empty".format(prefix, field))
+                if "priority" in item and (
+                    not isinstance(item["priority"], str)
+                    or item["priority"] not in {"high", "medium", "low"}
+                ):
+                    errors.append("{}.priority is invalid".format(prefix))
+            errors.extend(_validate_assessment(item["assessment"], prefix + ".assessment"))
+            if collection == "strategicCapabilities" and not _has_curated_support(
+                item["assessment"]
+            ):
+                errors.append("{}.assessment requires curated supporting evidence".format(prefix))
+        if order != sorted(order):
+            errors.append("{} must be sorted by id".format(collection))
+
+    relationships = document["relationships"]
+    if not isinstance(relationships, list):
+        errors.append("relationships must be an array")
+    else:
+        order = []
+        identities = set()
+        for index, item in enumerate(relationships):
+            prefix = "relationships[{}]".format(index)
+            required_relationship = {
+                "id", "type", "source", "target", "statement", "assessment"
+            }
+            if not _exact_fields(item, required_relationship):
+                errors.append("{} has invalid fields".format(prefix))
+                continue
+            relationship_id = item["id"]
+            if not isinstance(relationship_id, str) or not REPOSITORY_ID.fullmatch(
+                relationship_id
+            ):
+                errors.append("{}.id must be lowercase kebab-case".format(prefix))
+            else:
+                if relationship_id in all_ids:
+                    errors.append("{}.id is duplicated across the catalog".format(prefix))
+                all_ids.add(relationship_id)
+                order.append((str(item["type"]), relationship_id))
+            relationship_type = item["type"]
+            expected = (
+                CATALOG_RELATIONSHIPS.get(relationship_type)
+                if isinstance(relationship_type, str)
+                else None
+            )
+            if expected is None:
+                errors.append("{}.type is invalid".format(prefix))
+                expected = (None, None)
+            endpoints = []
+            for field, expected_type in zip(("source", "target"), expected):
+                endpoint = item[field]
+                endpoint_prefix = "{}.{}".format(prefix, field)
+                if not _exact_fields(endpoint, {"entityType", "entityId"}):
+                    errors.append("{} has invalid fields".format(endpoint_prefix))
+                    endpoints.append((None, None))
+                    continue
+                endpoint_type = endpoint["entityType"]
+                endpoint_id = endpoint["entityId"]
+                endpoints.append((endpoint_type, endpoint_id))
+                if endpoint_type != expected_type:
+                    errors.append("{} has an invalid entity type".format(endpoint_prefix))
+                if (
+                    not isinstance(endpoint_type, str)
+                    or not isinstance(endpoint_id, str)
+                    or (endpoint_type, endpoint_id) not in entities
+                ):
+                    errors.append("{} references an unknown entity".format(endpoint_prefix))
+            identity = (str(relationship_type),) + tuple(
+                (str(endpoint_type), str(endpoint_id))
+                for endpoint_type, endpoint_id in endpoints
+            )
+            if identity in identities:
+                errors.append("{} duplicates a relationship".format(prefix))
+            identities.add(identity)
+            if not _is_non_empty_string(item["statement"]):
+                errors.append("{}.statement must be non-empty".format(prefix))
+            errors.extend(_validate_assessment(item["assessment"], prefix + ".assessment"))
+            if (
+                item["type"] == "application-contributes-to-strategic-capability"
+                and not _has_curated_support(item["assessment"])
+            ):
+                errors.append("{}.assessment requires curated supporting evidence".format(prefix))
+        if order != sorted(order):
+            errors.append("relationships must be sorted by type and id")
+    if not _sorted_unique_strings(document["openQuestions"]):
+        errors.append("openQuestions must be sorted and unique")
+    return errors
+
+
+def _is_safe_topology_path(value):
+    if value == ".":
+        return True
+    if (
+        not _is_non_empty_string(value)
+        or value.startswith("/")
+        or value.endswith("/")
+        or "//" in value
+        or "\\" in value
+    ):
+        return False
+    return all(
+        part not in {"", ".", ".."}
+        and re.fullmatch(r"[A-Za-z0-9._-]+", part) is not None
+        for part in value.split("/")
+    )
+
+
+def _path_is_at_or_below(child, parent):
+    if child == ".":
+        return False
+    child_parts = PurePosixPath(child).parts
+    parent_parts = PurePosixPath(parent).parts
+    return child_parts[:len(parent_parts)] == parent_parts
+
+
+def validate_source_topology(document, source_registry=None, landscape_catalog=None):
+    """Validate portable source selections and their catalog bindings."""
+    if source_registry is not None:
+        dependency_errors = validate_source_registry(source_registry)
+        if dependency_errors:
+            return ["source registry: " + error for error in dependency_errors]
+    if landscape_catalog is not None:
+        dependency_errors = validate_landscape_catalog(landscape_catalog)
+        if dependency_errors:
+            return ["landscape catalog: " + error for error in dependency_errors]
+    if not _exact_fields(
+        document, {"schemaVersion", "repositories", "sourceSelections", "bindings"}
+    ):
+        return ["source topology has invalid fields"]
+    errors = []
+    if type(document["schemaVersion"]) is not int or document["schemaVersion"] != 1:
+        errors.append("schemaVersion must be 1")
+
+    registry = {}
+    if source_registry is not None:
+        registry = {item["id"]: item for item in source_registry["repositories"]}
+    repositories = {}
+    repository_values = document["repositories"]
+    if not isinstance(repository_values, list):
+        errors.append("repositories must be an array")
+        repository_values = []
+    repository_order = []
+    for index, item in enumerate(repository_values):
+        prefix = "repositories[{}]".format(index)
+        if not _exact_fields(item, {"id", "kind"}):
+            errors.append("{} has invalid fields".format(prefix))
+            continue
+        repository_id = item["id"]
+        if not isinstance(repository_id, str) or not REPOSITORY_ID.fullmatch(repository_id):
+            errors.append("{}.id must be lowercase kebab-case".format(prefix))
+        else:
+            repository_order.append(repository_id)
+            if repository_id in repositories:
+                errors.append("{}.id is duplicated".format(prefix))
+            repositories[repository_id] = item
+        if not isinstance(item["kind"], str) or item["kind"] not in KINDS:
+            errors.append("{}.kind is invalid".format(prefix))
+        registered = registry.get(repository_id) if isinstance(repository_id, str) else None
+        if source_registry is not None:
+            if registered is None:
+                errors.append("{}.id is not present in the source registry".format(prefix))
+            elif not registered["enabled"]:
+                errors.append("{}.id references a disabled source".format(prefix))
+            elif registered["kind"] != item["kind"]:
+                errors.append("{}.kind does not match the source registry".format(prefix))
+    if repository_order != sorted(repository_order):
+        errors.append("repositories must be sorted by id")
+
+    selections = {}
+    selection_identities = set()
+    selection_values = document["sourceSelections"]
+    if not isinstance(selection_values, list):
+        errors.append("sourceSelections must be an array")
+        selection_values = []
+    selection_order = []
+    for index, item in enumerate(selection_values):
+        prefix = "sourceSelections[{}]".format(index)
+        if not _exact_fields(item, {"id", "repositoryId", "subpath", "kind"}):
+            errors.append("{} has invalid fields".format(prefix))
+            continue
+        selection_id = item["id"]
+        if not isinstance(selection_id, str) or not REPOSITORY_ID.fullmatch(selection_id):
+            errors.append("{}.id must be lowercase kebab-case".format(prefix))
+        else:
+            selection_order.append(selection_id)
+            if selection_id in selections or selection_id in repositories:
+                errors.append("{}.id is duplicated".format(prefix))
+            selections[selection_id] = item
+        repository_id = item["repositoryId"]
+        repository = repositories.get(repository_id) if isinstance(repository_id, str) else None
+        if repository is None:
+            errors.append("{}.repositoryId references an unknown repository".format(prefix))
+        elif item["kind"] != repository["kind"]:
+            errors.append("{}.kind does not match its repository".format(prefix))
+        if not isinstance(item["kind"], str) or item["kind"] not in KINDS:
+            errors.append("{}.kind is invalid".format(prefix))
+        if not _is_safe_topology_path(item["subpath"]):
+            errors.append("{}.subpath must be a safe relative path".format(prefix))
+        identity = (str(repository_id), str(item["subpath"]), str(item["kind"]))
+        if identity in selection_identities:
+            errors.append("{} duplicates a source selection".format(prefix))
+        selection_identities.add(identity)
+        registered = registry.get(repository_id) if isinstance(repository_id, str) else None
+        if registered is not None and _is_safe_topology_path(item["subpath"]):
+            for exclusion in registered.get("exclude", []):
+                if _path_is_at_or_below(item["subpath"], exclusion):
+                    errors.append("{}.subpath is excluded by the source registry".format(prefix))
+                    break
+    if selection_order != sorted(selection_order):
+        errors.append("sourceSelections must be sorted by id")
+
+    catalog_targets = set()
+    if landscape_catalog is not None:
+        for collection, entity_type in CATALOG_COLLECTION_TYPES.items():
+            catalog_targets.update(
+                (entity_type, item["id"]) for item in landscape_catalog[collection]
+                if entity_type in {"application", "deployable"}
+            )
+    binding_values = document["bindings"]
+    if not isinstance(binding_values, list):
+        errors.append("bindings must be an array")
+        binding_values = []
+    binding_order = []
+    binding_identities = set()
+    for index, item in enumerate(binding_values):
+        prefix = "bindings[{}]".format(index)
+        if not _exact_fields(item, {"sourceSelectionId", "target", "status", "provenance"}):
+            errors.append("{} has invalid fields".format(prefix))
+            continue
+        selection_id = item["sourceSelectionId"]
+        if not isinstance(selection_id, str) or selection_id not in selections:
+            errors.append("{}.sourceSelectionId references an unknown selection".format(prefix))
+        target = item["target"]
+        if not _exact_fields(target, {"type", "id"}):
+            errors.append("{}.target has invalid fields".format(prefix))
+            continue
+        target_type = target["type"]
+        target_id = target["id"]
+        if not isinstance(target_type, str) or target_type not in {
+            "application", "deployable"
+        }:
+            errors.append("{}.target.type is invalid".format(prefix))
+        if not isinstance(target_id, str) or not REPOSITORY_ID.fullmatch(target_id):
+            errors.append("{}.target.id must be lowercase kebab-case".format(prefix))
+        if landscape_catalog is not None and (
+            not isinstance(target_type, str)
+            or not isinstance(target_id, str)
+            or (target_type, target_id) not in catalog_targets
+        ):
+            errors.append("{}.target references an unknown catalog entity".format(prefix))
+        identity = (str(selection_id), str(target_type), str(target_id))
+        binding_order.append(identity)
+        if identity in binding_identities:
+            errors.append("{} duplicates a binding".format(prefix))
+        binding_identities.add(identity)
+        provenance = item["provenance"]
+        if not _exact_fields(provenance, {"method", "detail"}):
+            errors.append("{}.provenance has invalid fields".format(prefix))
+            continue
+        expected_method = (
+            {"declared": "manual", "inferred": "folder-convention"}.get(item["status"])
+            if isinstance(item["status"], str)
+            else None
+        )
+        if expected_method is None:
+            errors.append("{}.status is invalid".format(prefix))
+        elif provenance["method"] != expected_method:
+            errors.append("{}.status and provenance method disagree".format(prefix))
+        if not _is_non_empty_string(provenance["detail"]):
+            errors.append("{}.provenance.detail must be non-empty".format(prefix))
+    if binding_order != sorted(binding_order):
+        errors.append("bindings must be sorted by selection and target")
+
+    if landscape_catalog is not None:
+        assessed = []
+        for collection in CATALOG_COLLECTION_TYPES:
+            assessed.extend(
+                ("{}[{}]".format(collection, index), item.get("assessment"))
+                for index, item in enumerate(landscape_catalog[collection])
+            )
+        assessed.extend(
+            ("relationships[{}]".format(index), item.get("assessment"))
+            for index, item in enumerate(landscape_catalog["relationships"])
+        )
+        for catalog_prefix, assessment in assessed:
+            for field in ("evidence", "counterevidence"):
+                for index, evidence in enumerate(assessment.get(field, [])):
+                    if evidence.get("kind") != "repository":
+                        continue
+                    prefix = "landscape catalog {}.{}[{}]".format(
+                        catalog_prefix, field, index
+                    )
+                    repository_id = evidence["repositoryId"]
+                    if repository_id not in repositories:
+                        errors.append("{} references an unknown topology repository".format(prefix))
+                    selection_id = evidence.get("sourceSelectionId")
+                    if selection_id is not None:
+                        selection = selections.get(selection_id)
+                        if selection is None:
+                            errors.append("{} references an unknown source selection".format(prefix))
+                        elif selection["repositoryId"] != repository_id:
+                            errors.append("{} source selection belongs to another repository".format(prefix))
     return errors

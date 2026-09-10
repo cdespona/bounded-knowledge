@@ -41,6 +41,9 @@ dependencies.
 ./tools/landscape sources validate sources.json
 ./tools/landscape sources resolve application-id --registry sources.json
 ./tools/landscape evidence select work/application-id.json --source /path/to/repository --output work/application-id-evidence.json
+./tools/landscape candidate validate work/application-id-candidate.json --evidence work/application-id-evidence.json
+./tools/landscape catalog validate work/landscape-catalog.json
+./tools/landscape topology validate work/source-topology.json --sources sources.json --catalog work/landscape-catalog.json
 ```
 
 `preflight` requires an independent, clean Git repository. It reports Copilot
@@ -67,6 +70,18 @@ dynamic, inherited, profile-dependent, or effective-model constructs remain visi
 manifest gaps. `evidence select` revalidates the inventory and clean source commit,
 reapplies safety exclusions, and writes a bounded, contract-validated evidence bundle.
 The exact supported forms and limits are documented in `docs/contracts/slice-3.md`.
+
+Model-produced candidates are validated against the exact selected evidence bundle before
+they can reach a later human gate. The read-only repository cartographer and its direct
+Copilot CLI trial procedure are documented in `docs/contracts/slice-4.md`.
+
+The canonical knowledge-model and source-topology contracts distinguish logical
+applications and deployables from physical repositories and monorepo subpaths. `catalog
+validate` checks evidence-backed entities and typed relationships. `topology validate`
+checks path-free source selections and many-to-many bindings against both the local source
+registry and catalog without resolving or modifying source repositories. The contracts are
+documented in `docs/contracts/slice-5a-knowledge-model.md` and
+`docs/contracts/slice-5a-source-topology.md`.
 
 ## Validation
 

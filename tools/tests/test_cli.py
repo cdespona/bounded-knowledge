@@ -53,7 +53,10 @@ class LandscapeCliTest(unittest.TestCase):
     def test_help_contract(self):
         result = self.run_cli("--help")
         self.assertEqual(0, result.returncode)
-        self.assertIn("{preflight,discover,validate,status,sources,evidence}", result.stdout)
+        self.assertIn(
+            "{preflight,discover,validate,status,sources,evidence,candidate,catalog,topology}",
+            result.stdout,
+        )
         self.assertEqual("", result.stderr)
 
     def test_argument_failure_exit_contract(self):
@@ -145,6 +148,101 @@ class LandscapeCliTest(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertEqual("", result.stdout)
         self.assertIn("independent Git repository root", result.stderr)
+
+    def test_candidate_validate_contract(self):
+        fixtures = PROJECT / "examples" / "contracts"
+        valid = self.run_cli(
+            "candidate", "validate", fixtures / "candidate-envelope.valid.json",
+            "--evidence", fixtures / "evidence-bundle.valid.json",
+        )
+        self.assertEqual(0, valid.returncode)
+        self.assertEqual({"errors": [], "valid": True}, json.loads(valid.stdout))
+        self.assertEqual("", valid.stderr)
+
+        invalid = self.run_cli(
+            "candidate", "validate", fixtures / "candidate-envelope.invalid.json",
+            "--evidence", fixtures / "evidence-bundle.valid.json",
+        )
+        self.assertEqual(1, invalid.returncode)
+        self.assertFalse(json.loads(invalid.stdout)["valid"])
+        self.assertEqual("", invalid.stderr)
+
+        malformed_path = self.base / "malformed.json"
+        malformed_path.write_text("not JSON\n", encoding="utf-8")
+        malformed = self.run_cli(
+            "candidate", "validate", malformed_path,
+            "--evidence", fixtures / "evidence-bundle.valid.json",
+        )
+        self.assertEqual(1, malformed.returncode)
+        self.assertEqual("", malformed.stdout)
+        self.assertTrue(malformed.stderr.startswith("error: "))
+
+    def test_catalog_validate_contract(self):
+        fixtures = PROJECT / "examples" / "contracts"
+        catalog = fixtures / "landscape-catalog.valid.json"
+        valid = self.run_cli("catalog", "validate", catalog)
+        repeated = self.run_cli("catalog", "validate", catalog)
+        self.assertEqual(0, valid.returncode)
+        self.assertEqual(valid.stdout, repeated.stdout)
+        self.assertEqual({"errors": [], "valid": True}, json.loads(valid.stdout))
+        self.assertEqual("", valid.stderr)
+
+        invalid = self.run_cli(
+            "catalog", "validate", fixtures / "landscape-catalog.invalid.json"
+        )
+        self.assertEqual(1, invalid.returncode)
+        self.assertFalse(json.loads(invalid.stdout)["valid"])
+        self.assertEqual("", invalid.stderr)
+
+        malformed_path = self.base / "malformed-catalog.json"
+        malformed_path.write_text("not JSON\n", encoding="utf-8")
+        malformed = self.run_cli("catalog", "validate", malformed_path)
+        self.assertEqual(1, malformed.returncode)
+        self.assertEqual("", malformed.stdout)
+        self.assertTrue(malformed.stderr.startswith("error: "))
+
+    def test_topology_validate_contract_is_stable_and_read_only(self):
+        fixtures = PROJECT / "examples" / "contracts"
+        topology_path = fixtures / "source-topology.valid.json"
+        topology = json.loads(topology_path.read_text(encoding="utf-8"))
+        sources_path = self.base / "sources.json"
+        sources = {
+            "schemaVersion": 1,
+            "repositories": [
+                {
+                    "enabled": True,
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "path": str(self.base / item["id"]),
+                }
+                for item in topology["repositories"]
+            ],
+        }
+        sources_path.write_text(
+            json.dumps(sources, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        before = sources_path.read_bytes()
+        arguments = (
+            "topology", "validate", topology_path,
+            "--sources", sources_path,
+            "--catalog", fixtures / "landscape-catalog.valid.json",
+        )
+        valid = self.run_cli(*arguments)
+        repeated = self.run_cli(*arguments)
+        self.assertEqual(0, valid.returncode)
+        self.assertEqual(valid.stdout, repeated.stdout)
+        self.assertEqual({"errors": [], "valid": True}, json.loads(valid.stdout))
+        self.assertEqual("", valid.stderr)
+        self.assertEqual(before, sources_path.read_bytes())
+
+        invalid = self.run_cli(
+            "topology", "validate", fixtures / "source-topology.invalid.json",
+            "--sources", sources_path,
+            "--catalog", fixtures / "landscape-catalog.valid.json",
+        )
+        self.assertEqual(1, invalid.returncode)
+        self.assertFalse(json.loads(invalid.stdout)["valid"])
+        self.assertEqual("", invalid.stderr)
 
     def test_evidence_select_writes_stable_valid_bundle(self):
         secret = self.repository / ".env"

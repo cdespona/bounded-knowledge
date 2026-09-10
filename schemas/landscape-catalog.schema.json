@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/landscape-catalog.schema.json",
+  "title": "Canonical application landscape catalog",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "applications",
+    "deployables",
+    "boundedContexts",
+    "useCases",
+    "terms",
+    "strategicCapabilities",
+    "relationships",
+    "openQuestions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "applications": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/application" }
+    },
+    "deployables": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deployable" }
+    },
+    "boundedContexts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/boundedContext" }
+    },
+    "useCases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/useCase" }
+    },
+    "terms": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/term" }
+    },
+    "strategicCapabilities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/strategicCapability" }
+    },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relationship" }
+    },
+    "openQuestions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "repositoryEvidence": {
+      "type": "object",
+      "required": ["kind", "repositoryId", "commit", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "repository" },
+        "repositoryId": { "$ref": "#/$defs/id" },
+        "sourceSelectionId": { "$ref": "#/$defs/id" },
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" },
+        "observationId": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "curatedEvidence": {
+      "type": "object",
+      "required": ["kind", "sourceId", "sourceType", "suppliedBy", "recordedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "curated" },
+        "sourceId": { "$ref": "#/$defs/id" },
+        "sourceType": {
+          "enum": ["interview", "document", "approved-reference"]
+        },
+        "suppliedBy": { "type": "string", "minLength": 1 },
+        "recordedAt": { "type": "string", "format": "date-time" },
+        "locator": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidence": {
+      "oneOf": [
+        { "$ref": "#/$defs/repositoryEvidence" },
+        { "$ref": "#/$defs/curatedEvidence" }
+      ]
+    },
+    "assessment": {
+      "type": "object",
+      "required": ["status", "confidence", "evidence", "counterevidence", "analyzedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "analyzedAt": { "type": "string", "format": "date-time" },
+        "status": { "enum": ["confirmed", "inferred", "unknown"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "counterevidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "missingEvidence": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "enum": ["confirmed", "inferred"] } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": { "evidence": { "minItems": 1 } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "unknown" } },
+            "required": ["status"]
+          },
+          "then": { "required": ["missingEvidence"] }
+        }
+      ]
+    },
+    "application": {
+      "type": "object",
+      "required": ["id", "name", "purpose", "assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "purpose": { "type": "string", "minLength": 1 },
+        "assessment": { "$ref": "#/$defs/assessment" }
+      }
+    },
+    "deployable": {
+      "type": "object",
+      "required": ["id", "name", "kind", "assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "kind": {
+          "enum": ["service", "worker", "job", "function", "scheduled-process", "other"]
+        },
+        "assessment": { "$ref": "#/$defs/assessment" }
+      }
+    },
+    "boundedContext": {
+      "type": "object",
+      "required": ["id", "name", "description", "assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "assessment": { "$ref": "#/$defs/assessment" }
+      }
+    },
+    "useCase": {
+      "type": "object",
+      "required": ["id", "name", "actor", "outcome", "assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "actor": { "type": "string", "minLength": 1 },
+        "outcome": { "type": "string", "minLength": 1 },
+        "assessment": { "$ref": "#/$defs/assessment" }
+      }
+    },
+    "term": {
+      "type": "object",
+      "required": ["id", "name", "definition", "assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "definition": { "type": "string", "minLength": 1 },
+        "assessment": { "$ref": "#/$defs/assessment" }
+      }
+    },
+    "strategicCapability": {
+      "type": "object",
+      "required": ["id", "name", "type", "statement", "desiredOutcomes", "assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": ["objective", "capability", "principle", "constraint", "initiative"]
+        },
+        "statement": { "type": "string", "minLength": 1 },
+        "desiredOutcomes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "timeHorizon": { "type": "string", "minLength": 1 },
+        "priority": { "enum": ["high", "medium", "low"] },
+        "assessment": { "$ref": "#/$defs/assessment" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "assessment": {
+                "properties": {
+                  "status": { "enum": ["confirmed", "inferred"] }
+                },
+                "required": ["status"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "assessment": {
+                "properties": {
+                  "evidence": {
+                    "contains": {
+                      "properties": { "kind": { "const": "curated" } },
+                      "required": ["kind"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "endpoint": {
+      "type": "object",
+      "required": ["entityType", "entityId"],
+      "additionalProperties": false,
+      "properties": {
+        "entityType": {
+          "enum": ["application", "deployable", "bounded-context", "use-case", "term", "strategic-capability"]
+        },
+        "entityId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "required": ["id", "type", "source", "target", "statement", "assessment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": {
+          "enum": [
+            "application-comprises-deployable",
+            "application-participates-in-bounded-context",
+            "application-supports-use-case",
+            "bounded-context-defines-term",
+            "application-contributes-to-strategic-capability"
+          ]
+        },
+        "source": { "$ref": "#/$defs/endpoint" },
+        "target": { "$ref": "#/$defs/endpoint" },
+        "statement": { "type": "string", "minLength": 1 },
+        "assessment": { "$ref": "#/$defs/assessment" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "application-comprises-deployable" } } },
+          "then": {
+            "properties": {
+              "source": { "properties": { "entityType": { "const": "application" } } },
+              "target": { "properties": { "entityType": { "const": "deployable" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "application-participates-in-bounded-context" } } },
+          "then": {
+            "properties": {
+              "source": { "properties": { "entityType": { "const": "application" } } },
+              "target": { "properties": { "entityType": { "const": "bounded-context" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "application-supports-use-case" } } },
+          "then": {
+            "properties": {
+              "source": { "properties": { "entityType": { "const": "application" } } },
+              "target": { "properties": { "entityType": { "const": "use-case" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "bounded-context-defines-term" } } },
+          "then": {
+            "properties": {
+              "source": { "properties": { "entityType": { "const": "bounded-context" } } },
+              "target": { "properties": { "entityType": { "const": "term" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "application-contributes-to-strategic-capability" } } },
+          "then": {
+            "properties": {
+              "source": { "properties": { "entityType": { "const": "application" } } },
+              "target": { "properties": { "entityType": { "const": "strategic-capability" } } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "application-contributes-to-strategic-capability" },
+              "assessment": {
+                "properties": {
+                  "status": { "enum": ["confirmed", "inferred"] }
+                },
+                "required": ["status"]
+              }
+            },
+            "required": ["type", "assessment"]
+          },
+          "then": {
+            "properties": {
+              "assessment": {
+                "properties": {
+                  "evidence": {
+                    "contains": {
+                      "properties": { "kind": { "const": "curated" } },
+                      "required": ["kind"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

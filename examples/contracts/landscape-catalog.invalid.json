@@ -1,0 +1,45 @@
+{
+  "applications": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "high",
+        "counterevidence": [],
+        "evidence": [],
+        "status": "confirmed"
+      },
+      "id": "Order Management",
+      "name": "Order Management",
+      "purpose": "Coordinates orders."
+    }
+  ],
+  "boundedContexts": [],
+  "deployables": [],
+  "openQuestions": [],
+  "relationships": [
+    {
+      "assessment": {
+        "analyzedAt": "2026-09-10T10:00:00Z",
+        "confidence": "low",
+        "counterevidence": [],
+        "evidence": [],
+        "status": "unknown"
+      },
+      "id": "invalid-endpoints",
+      "source": {
+        "entityId": "place-order",
+        "entityType": "use-case"
+      },
+      "statement": "A use case cannot be the source of this relationship type.",
+      "target": {
+        "entityId": "order-management",
+        "entityType": "application"
+      },
+      "type": "application-supports-use-case"
+    }
+  ],
+  "schemaVersion": 1,
+  "strategicCapabilities": [],
+  "terms": [],
+  "useCases": []
+}

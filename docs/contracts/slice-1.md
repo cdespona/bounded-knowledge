@@ -110,6 +110,9 @@ Candidates remain outside `catalog/`. Validation does not authorize promotion.
 ./tools/landscape sources validate REGISTRY
 ./tools/landscape sources resolve ID --registry REGISTRY
 ./tools/landscape evidence select INVENTORY --source SOURCE --output PATH
+./tools/landscape candidate validate CANDIDATE --evidence BUNDLE
+./tools/landscape catalog validate CATALOG
+./tools/landscape topology validate TOPOLOGY --sources REGISTRY --catalog CATALOG
 ```
 
 | Command outcome | Standard output | Standard error | Exit |
@@ -126,11 +129,10 @@ Candidates remain outside `catalog/`. Validation does not authorize promotion.
 produce no standard output. All JSON written by the current CLI is stable, sorted,
 two-space-indented, and terminated by one newline.
 
-## Reserved later command contracts
+## Candidate command contract
 
-The candidate command and its flags are the remaining reserved consumer of the Slice 1
-artifacts. It is not yet implemented. Changing it requires an explicit contract revision
-before a workflow consumes the new surface.
+Slice 4 implements the remaining reserved consumer of the Slice 1 artifacts. Changing its
+surface requires an explicit contract revision before a workflow consumes it.
 
 ```text
 ./tools/landscape candidate validate CANDIDATE --evidence BUNDLE

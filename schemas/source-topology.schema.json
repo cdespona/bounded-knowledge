@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/source-topology.schema.json",
+  "title": "Landscape source topology",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "repositories",
+    "sourceSelections",
+    "bindings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "repositories": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/repository" },
+      "uniqueItems": true
+    },
+    "sourceSelections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceSelection" },
+      "uniqueItems": true
+    },
+    "bindings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/binding" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "repositoryKind": {
+      "enum": ["application", "kubernetes", "terraform", "pipeline", "other"]
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "pattern": "^(?:\\.|(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)$"
+    },
+    "mappingStatus": {
+      "enum": ["declared", "inferred"]
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["method", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "method": { "enum": ["manual", "folder-convention"] },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "$ref": "#/$defs/repositoryKind" }
+      }
+    },
+    "sourceSelection": {
+      "type": "object",
+      "required": ["id", "repositoryId", "subpath", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "repositoryId": { "$ref": "#/$defs/id" },
+        "subpath": { "$ref": "#/$defs/safeRelativePath" },
+        "kind": { "$ref": "#/$defs/repositoryKind" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["application", "deployable"] },
+        "id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "required": ["sourceSelectionId", "target", "status", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceSelectionId": { "$ref": "#/$defs/id" },
+        "target": { "$ref": "#/$defs/target" },
+        "status": { "$ref": "#/$defs/mappingStatus" },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": { "const": "declared" },
+            "provenance": {
+              "properties": { "method": { "const": "manual" } }
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": { "const": "inferred" },
+            "provenance": {
+              "properties": { "method": { "const": "folder-convention" } }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
