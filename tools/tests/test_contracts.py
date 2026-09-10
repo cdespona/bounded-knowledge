@@ -13,6 +13,7 @@ sys.path.insert(0, str(TOOLS))
 
 from landscape_core.contracts import (  # noqa: E402
     artifact_id,
+    validate_api_observation,
     validate_candidate_envelope,
     validate_evidence_bundle,
     validate_landscape_catalog,
@@ -44,6 +45,35 @@ class ContractTest(unittest.TestCase):
             self.assertEqual([], validate_manifest_observation(item), index)
         for index, item in enumerate(load("manifest-observations.invalid.json")):
             self.assertTrue(validate_manifest_observation(item), index)
+
+    def test_api_observation_examples(self):
+        for index, item in enumerate(load("api-observations.valid.json")):
+            self.assertEqual([], validate_api_observation(item), index)
+        for index, item in enumerate(load("api-observations.invalid.json")):
+            self.assertTrue(validate_api_observation(item), index)
+        yaml_document = load("api-observations.valid.json")[0]
+        yaml_document["value"]["serialization"] = "yaml"
+        self.assertTrue(validate_api_observation(yaml_document))
+        unknown_yaml_gap = load("api-observations.valid.json")[-1]
+        unknown_yaml_gap["value"]["specification"] = "unknown"
+        self.assertTrue(validate_api_observation(unknown_yaml_gap))
+
+    def test_api_observation_lines_and_literals_are_part_of_identity(self):
+        value = load("api-observations.valid.json")[1]["value"]
+        common = {
+            "kind": "api-operation",
+            "repository": "synthetic-java-service",
+            "commit": "a" * 40,
+            "detector": "api-contract",
+            "detector_version": 1,
+            "source_path": "src/main/resources/openapi.json",
+        }
+        first = observation(source_lines="8-10", value=value, **common)
+        moved = observation(source_lines="9-11", value=value, **common)
+        changed = observation(
+            source_lines="8-10", value=dict(value, target="/customers"), **common
+        )
+        self.assertEqual(3, len({first["id"], moved["id"], changed["id"]}))
 
     def test_observation_inventory_examples(self):
         self.assertEqual([], validate_inventory(load("observation-inventory.valid.json")))

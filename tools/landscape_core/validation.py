@@ -4,7 +4,12 @@ from pathlib import Path, PurePosixPath
 import re
 
 from .git_repository import commit_sha, require_repository_root
-from .contracts import MANIFEST_KINDS, validate_manifest_observation
+from .contracts import (
+    API_KINDS,
+    MANIFEST_KINDS,
+    validate_api_observation,
+    validate_manifest_observation,
+)
 from .observations import observation
 from .safety import exclusion_reason
 
@@ -134,6 +139,8 @@ def validate_inventory(document, source=None):
                 errors.append("{}.id does not match its content".format(prefix))
         if item.get("kind") in MANIFEST_KINDS:
             errors.extend(validate_manifest_observation(item, prefix))
+        if item.get("kind") in API_KINDS:
+            errors.extend(validate_api_observation(item, prefix))
 
     if not isinstance(document["excluded"], list):
         errors.append("excluded must be an array")

@@ -1,0 +1,75 @@
+[
+  {
+    "kind": "api-document",
+    "source": { "lines": "2-4", "path": "src/main/resources/openapi.json" },
+    "value": {
+      "serialization": "json",
+      "specification": "openapi",
+      "specificationVersion": "3.2.0",
+      "title": "Synthetic Orders API"
+    }
+  },
+  {
+    "kind": "api-operation",
+    "source": { "lines": "8", "path": "src/main/resources/openapi.json" },
+    "value": {
+      "action": "query",
+      "operationId": "searchOrders",
+      "operationType": "http",
+      "specification": "openapi",
+      "target": "/orders"
+    }
+  },
+  {
+    "kind": "api-document",
+    "source": { "lines": "2-4", "path": "contracts/v2/asyncapi.json" },
+    "value": {
+      "serialization": "json",
+      "specification": "asyncapi",
+      "specificationVersion": "2.6.0",
+      "title": "Synthetic Order Events v2"
+    }
+  },
+  {
+    "kind": "api-operation",
+    "source": { "lines": "9-11", "path": "contracts/v2/asyncapi.json" },
+    "value": {
+      "action": "publish",
+      "operationId": "publishOrderCreated",
+      "operationType": "channel",
+      "specification": "asyncapi",
+      "target": "orderCreated"
+    }
+  },
+  {
+    "kind": "api-document",
+    "source": { "lines": "2-4", "path": "contracts/v3/asyncapi.json" },
+    "value": {
+      "serialization": "json",
+      "specification": "asyncapi",
+      "specificationVersion": "3.1.0",
+      "title": "Synthetic Order Events v3"
+    }
+  },
+  {
+    "kind": "api-operation",
+    "source": { "lines": "12-15", "path": "contracts/v3/asyncapi.json" },
+    "value": {
+      "action": "send",
+      "operationKey": "publishOrderCreated",
+      "operationType": "channel",
+      "specification": "asyncapi",
+      "target": "#/channels/orderCreated"
+    }
+  },
+  {
+    "kind": "api-gap",
+    "source": { "lines": "1", "path": "contracts/orders.asyncapi.yaml" },
+    "value": {
+      "code": "unsupported-yaml",
+      "detail": "YAML API documents are identified by filename but are not parsed in detector version 1.",
+      "serialization": "yaml",
+      "specification": "asyncapi"
+    }
+  }
+]

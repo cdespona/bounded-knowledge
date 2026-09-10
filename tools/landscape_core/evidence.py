@@ -15,6 +15,7 @@ MAX_RANGES_PER_FILE = 16
 MAX_LINES_PER_SELECTION = 200
 MAX_CONTENT_BYTES = 16 * 1024
 MAX_TOTAL_CONTENT_BYTES = 256 * 1024
+GAP_KINDS = {"api-gap", "manifest-gap"}
 
 
 def inventory_digest(document):
@@ -101,7 +102,7 @@ def select_evidence(inventory, source):
         if isinstance(item, dict)
         and isinstance(item.get("source"), dict)
         and item["source"].get("lines")
-        and item.get("kind") != "manifest-gap"
+        and item.get("kind") not in GAP_KINDS
     }
     candidates = {}
     whole_file_keys = set()
@@ -111,7 +112,7 @@ def select_evidence(inventory, source):
         if not isinstance(source_ref, dict):
             continue
         relative = source_ref["path"]
-        if item.get("kind") == "manifest-gap":
+        if item.get("kind") in GAP_KINDS:
             gaps.append({
                 "code": item["value"]["code"],
                 "detail": item["value"]["detail"],

@@ -21,6 +21,12 @@ MANIFEST_KINDS = {
     "build-module",
     "manifest-gap",
 }
+API_KINDS = {"api-document", "api-operation", "api-gap"}
+API_SPECIFICATIONS = {"openapi", "asyncapi"}
+API_SERIALIZATIONS = {"json", "yaml"}
+HTTP_ACTIONS = {
+    "delete", "get", "head", "options", "patch", "post", "put", "query", "trace"
+}
 CATALOG_COLLECTION_TYPES = {
     "applications": "application",
     "deployables": "deployable",
@@ -174,6 +180,99 @@ def validate_manifest_observation(item, prefix="observation"):
         for field in ("code", "detail"):
             if not _is_non_empty_string(value.get(field)):
                 errors.append("{}.value.{} must be a non-empty string".format(prefix, field))
+    return errors
+
+
+def validate_api_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for a literal API observation."""
+    if not isinstance(item, dict):
+        return ["{} must be an object".format(prefix)]
+    kind = item.get("kind")
+    if not isinstance(kind, str) or kind not in API_KINDS:
+        return ["{}.kind is not an API observation kind".format(prefix)]
+
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    if not isinstance(value, dict):
+        return errors + ["{}.value must be an object".format(prefix)]
+
+    specification = value.get("specification")
+    if kind == "api-gap":
+        required = {"specification", "serialization", "code", "detail"}
+        if not _exact_fields(value, required):
+            errors.append("{}.value has invalid api-gap fields".format(prefix))
+        if specification not in API_SPECIFICATIONS | {"unknown"}:
+            errors.append("{}.value.specification is invalid".format(prefix))
+        if value.get("serialization") not in API_SERIALIZATIONS:
+            errors.append("{}.value.serialization is invalid".format(prefix))
+        if value.get("serialization") == "yaml" and specification == "unknown":
+            errors.append(
+                "{}.value.specification cannot be unknown for a YAML filename gap".format(
+                    prefix
+                )
+            )
+        code = value.get("code")
+        if not isinstance(code, str) or not REPOSITORY_ID.fullmatch(code):
+            errors.append("{}.value.code must be lowercase kebab-case".format(prefix))
+        if not _is_non_empty_string(value.get("detail")):
+            errors.append("{}.value.detail must be a non-empty string".format(prefix))
+        return errors
+
+    if specification not in API_SPECIFICATIONS:
+        errors.append("{}.value.specification is invalid".format(prefix))
+
+    if kind == "api-document":
+        required = {"specification", "serialization", "specificationVersion"}
+        if not _exact_fields(value, required, {"title"}):
+            errors.append("{}.value has invalid api-document fields".format(prefix))
+        if value.get("serialization") != "json":
+            errors.append("{}.value.serialization must be json".format(prefix))
+        if not _is_non_empty_string(value.get("specificationVersion")):
+            errors.append(
+                "{}.value.specificationVersion must be a non-empty string".format(prefix)
+            )
+        if "title" in value and not _is_non_empty_string(value["title"]):
+            errors.append("{}.value.title must be a non-empty string".format(prefix))
+        return errors
+
+    operation_type = value.get("operationType")
+    action = value.get("action")
+    target = value.get("target")
+    if specification == "openapi":
+        required = {"specification", "operationType", "action", "target"}
+        if not _exact_fields(value, required, {"operationId"}):
+            errors.append("{}.value has invalid OpenAPI operation fields".format(prefix))
+        if operation_type != "http":
+            errors.append("{}.value.operationType must be http".format(prefix))
+        if action not in HTTP_ACTIONS:
+            errors.append("{}.value.action is not a supported HTTP action".format(prefix))
+        if not _is_non_empty_string(target) or not target.startswith("/"):
+            errors.append("{}.value.target must be an HTTP path".format(prefix))
+    elif action in {"publish", "subscribe"}:
+        required = {"specification", "operationType", "action", "target"}
+        if not _exact_fields(value, required, {"operationId"}):
+            errors.append("{}.value has invalid AsyncAPI 2 operation fields".format(prefix))
+        if operation_type != "channel":
+            errors.append("{}.value.operationType must be channel".format(prefix))
+        if not _is_non_empty_string(target):
+            errors.append("{}.value.target must be a channel key".format(prefix))
+    else:
+        required = {
+            "specification", "operationType", "operationKey", "action", "target"
+        }
+        if not _exact_fields(value, required):
+            errors.append("{}.value has invalid AsyncAPI 3 operation fields".format(prefix))
+        if operation_type != "channel":
+            errors.append("{}.value.operationType must be channel".format(prefix))
+        if action not in {"send", "receive"}:
+            errors.append("{}.value.action must be send or receive".format(prefix))
+        if not _is_non_empty_string(value.get("operationKey")):
+            errors.append("{}.value.operationKey must be a non-empty string".format(prefix))
+        if not _is_non_empty_string(target):
+            errors.append("{}.value.target must be a literal channel reference".format(prefix))
+
+    if "operationId" in value and not _is_non_empty_string(value["operationId"]):
+        errors.append("{}.value.operationId must be a non-empty string".format(prefix))
     return errors
 
 

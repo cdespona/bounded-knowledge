@@ -4,6 +4,7 @@ from .generic_files import GenericFileDetector
 from .git import GitDetector
 from .gradle import GradleManifestDetector
 from .maven import MavenManifestDetector
+from .api_contract import ApiContractDetector
 
 
 def built_in_detectors():
@@ -12,4 +13,5 @@ def built_in_detectors():
         GenericFileDetector(),
         MavenManifestDetector(),
         GradleManifestDetector(),
+        ApiContractDetector(),
     ]

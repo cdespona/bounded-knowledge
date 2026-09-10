@@ -71,6 +71,12 @@ manifest gaps. `evidence select` revalidates the inventory and clean source comm
 reapplies safety exclusions, and writes a bounded, contract-validated evidence bundle.
 The exact supported forms and limits are documented in `docs/contracts/slice-3.md`.
 
+Discovery also inventories operations from conventionally named OpenAPI and AsyncAPI
+JSON documents. It keeps the version-specific operation vocabularies distinct and emits
+visible gaps for unsupported versions, malformed structures, duplicate JSON keys, and
+matching YAML documents. YAML contents are not parsed in detector version 1. The exact
+boundary is documented in `docs/contracts/slice-6-api-inventory.md`.
+
 Model-produced candidates are validated against the exact selected evidence bundle before
 they can reach a later human gate. The read-only repository cartographer and its direct
 Copilot CLI trial procedure are documented in `docs/contracts/slice-4.md`.

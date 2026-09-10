@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/api-observation.schema.json",
+  "title": "Literal OpenAPI and AsyncAPI observation contract",
+  "type": "object",
+  "required": ["kind", "source", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "api-document",
+        "api-operation",
+        "api-gap"
+      ]
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "value": {
+      "oneOf": [
+        { "$ref": "#/$defs/apiDocument" },
+        { "$ref": "#/$defs/apiOperation" },
+        { "$ref": "#/$defs/apiGap" }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": { "const": "api-document" },
+        "value": { "$ref": "#/$defs/apiDocument" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "api-operation" },
+        "value": { "$ref": "#/$defs/apiOperation" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "api-gap" },
+        "value": { "$ref": "#/$defs/apiGap" }
+      }
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+      }
+    },
+    "specification": { "enum": ["openapi", "asyncapi"] },
+    "serialization": { "enum": ["json", "yaml"] },
+    "apiDocument": {
+      "type": "object",
+      "required": ["specification", "serialization", "specificationVersion"],
+      "additionalProperties": false,
+      "properties": {
+        "specification": { "$ref": "#/$defs/specification" },
+        "serialization": { "const": "json" },
+        "specificationVersion": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
+    "openApiOperation": {
+      "type": "object",
+      "required": ["specification", "operationType", "action", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "specification": { "const": "openapi" },
+        "operationType": { "const": "http" },
+        "action": {
+          "enum": ["delete", "get", "head", "options", "patch", "post", "put", "query", "trace"]
+        },
+        "target": { "type": "string", "minLength": 1, "pattern": "^/" },
+        "operationId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "asyncApi2Operation": {
+      "type": "object",
+      "required": ["specification", "operationType", "action", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "specification": { "const": "asyncapi" },
+        "operationType": { "const": "channel" },
+        "action": { "enum": ["publish", "subscribe"] },
+        "target": { "type": "string", "minLength": 1 },
+        "operationId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "asyncApi3Operation": {
+      "type": "object",
+      "required": ["specification", "operationType", "operationKey", "action", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "specification": { "const": "asyncapi" },
+        "operationType": { "const": "channel" },
+        "operationKey": { "type": "string", "minLength": 1 },
+        "action": { "enum": ["receive", "send"] },
+        "target": { "type": "string", "minLength": 1 }
+      }
+    },
+    "apiOperation": {
+      "oneOf": [
+        { "$ref": "#/$defs/openApiOperation" },
+        { "$ref": "#/$defs/asyncApi2Operation" },
+        { "$ref": "#/$defs/asyncApi3Operation" }
+      ]
+    },
+    "apiGap": {
+      "type": "object",
+      "required": ["specification", "serialization", "code", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "specification": { "enum": ["asyncapi", "openapi", "unknown"] },
+        "serialization": { "$ref": "#/$defs/serialization" },
+        "code": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "detail": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "serialization": { "const": "yaml" } },
+            "required": ["serialization"]
+          },
+          "then": {
+            "properties": {
+              "specification": { "enum": ["asyncapi", "openapi"] }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

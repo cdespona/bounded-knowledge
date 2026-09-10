@@ -1,0 +1,17 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Synthetic Customer API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/customers": {
+      "get": {
+        "operationId": "listCustomers",
+        "responses": {
+          "200": { "description": "Synthetic response" }
+        }
+      }
+    }
+  }
+}

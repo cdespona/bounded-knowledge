@@ -1,0 +1,60 @@
+[
+  {
+    "kind": "api-document",
+    "source": { "lines": "2-4", "path": "openapi.json" },
+    "value": {
+      "serialization": "json",
+      "specification": "openapi",
+      "version": "3.2.0"
+    }
+  },
+  {
+    "kind": "api-operation",
+    "source": { "lines": "12-8", "path": "../openapi.json" },
+    "value": {
+      "action": "POST",
+      "operationType": "http",
+      "specification": "openapi",
+      "target": "orders"
+    }
+  },
+  {
+    "kind": "api-operation",
+    "source": { "lines": "12-15", "path": "contracts/v3/asyncapi.json" },
+    "value": {
+      "action": "send",
+      "operationId": "publishOrderCreated",
+      "operationType": "channel",
+      "specification": "asyncapi",
+      "target": "orderCreated"
+    }
+  },
+  {
+    "kind": "api-gap",
+    "source": { "lines": "1", "path": "contracts/orders.asyncapi.yaml" },
+    "value": {
+      "code": "UNSUPPORTED_YAML",
+      "serialization": "yaml",
+      "specification": "asyncapi"
+    }
+  },
+  {
+    "kind": "api-document",
+    "source": { "lines": "1", "path": "contracts/orders.asyncapi.yaml" },
+    "value": {
+      "serialization": "yaml",
+      "specification": "asyncapi",
+      "specificationVersion": "3.1.0"
+    }
+  },
+  {
+    "kind": "api-gap",
+    "source": { "lines": "1", "path": "contracts/ambiguous.openapi.yaml" },
+    "value": {
+      "code": "ambiguous-marker",
+      "detail": "Synthetic invalid gap.",
+      "serialization": "yaml",
+      "specification": "unknown"
+    }
+  }
+]

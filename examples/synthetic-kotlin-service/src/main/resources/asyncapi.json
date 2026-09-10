@@ -1,0 +1,20 @@
+{
+  "asyncapi": "3.1.0",
+  "info": {
+    "title": "Synthetic Customer Events",
+    "version": "1.0.0"
+  },
+  "channels": {
+    "customerUpdated": {
+      "address": "customer.updated"
+    }
+  },
+  "operations": {
+    "publishCustomerUpdated": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/customerUpdated"
+      }
+    }
+  }
+}
