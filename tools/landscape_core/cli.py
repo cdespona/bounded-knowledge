@@ -11,7 +11,7 @@ from .contracts import (
     validate_source_registry,
     validate_source_topology,
 )
-from .candidates import validate_candidate
+from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
 from .git_repository import RepositoryError, commit_sha, require_repository_root
@@ -37,7 +37,7 @@ def _write_json(document, output=None):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="landscape", description="Deterministic Mercurio landscape discovery"
+        prog="landscape", description="Deterministic landscape discovery"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -97,6 +97,11 @@ def build_parser():
     )
     candidate_validate_parser.add_argument("candidate")
     candidate_validate_parser.add_argument("--evidence", required=True)
+    candidate_extract_parser = candidate_subparsers.add_parser(
+        "extract", help="extract one JSON candidate from a captured model response"
+    )
+    candidate_extract_parser.add_argument("response")
+    candidate_extract_parser.add_argument("--output", required=True)
 
     catalog_parser = subparsers.add_parser(
         "catalog", help="validate canonical landscape knowledge"
@@ -181,6 +186,11 @@ def main(argv=None):
             errors = validate_candidate(candidate, evidence)
             _write_json({"valid": not errors, "errors": errors})
             return 0 if not errors else 1
+
+        if args.command == "candidate" and args.candidate_command == "extract":
+            response = Path(args.response).read_text(encoding="utf-8")
+            _write_json(extract_candidate_response(response), output=args.output)
+            return 0
 
         if args.command == "catalog" and args.catalog_command == "validate":
             catalog = json.loads(Path(args.catalog).read_text(encoding="utf-8"))

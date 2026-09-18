@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Active working plan |
-| Last updated | 2026-09-10 |
+| Last updated | 2026-09-18 |
 | Primary owner | Technical lead |
 | Repository | `bounded-knowledge` |
 | Purpose | Track the product vision, decisions, roadmap, progress, evidence policy, and open questions for the application-landscape initiative |
@@ -441,9 +441,9 @@ questions.
 | Slice 2: source resolution | Complete and committed | Physical Git-root resolution and Copilot customization approval |
 | Slice 3: manifest extraction and evidence selection | Complete and committed | Literal Maven/Gradle observations and bounded evidence bundles |
 | Slice 4: candidate validation | Complete and committed | Deterministic candidate and evidence binding; included in checkpoint `6eb9777` |
-| Slice 4: direct Copilot trials | Blocked externally | Java and Kotlin inventories and evidence reproduce; Copilot CLI has no local authentication |
+| Slice 4: direct Copilot trials | Complete | Harness credential isolation diagnosed; unsandboxed Java and Kotlin responses extracted deterministically and both candidates validate |
 | Knowledge model and source topology v2 | Complete and committed | Strict schemas, representative fixtures, deterministic validators, and cross-artifact CLI validation; included in checkpoint `6eb9777` |
-| Slice 6: OpenAPI and AsyncAPI inventory | Implemented and validated | Structural JSON operations, visible YAML gaps, independent review findings closed; 63 tests pass |
+| Slice 6: OpenAPI and AsyncAPI inventory | Implemented and validated | Structural JSON operations, visible YAML gaps, independent review findings closed; 64 tests pass after Slice 4 extraction coverage |
 | Private pilot | Not started | Pilot applications are not yet selected |
 | Canonical promotion | Not started | Requires reviewed target model and pilot |
 | Local website | Not started | Information architecture defined in this plan |
@@ -562,8 +562,9 @@ Pilot acceptance criteria:
 | 2026-09-10 | Deterministic suite revalidated | 40 tests passed |
 | 2026-09-10 | Knowledge model and source topology v2 implemented through parallel contract work and central integration | Catalog owns logical entities and application-to-deployable relationships; topology owns repository selections and selection bindings |
 | 2026-09-10 | Independent Slice 5A review completed and findings resolved | Closed schema-validator parity, dangling evidence-reference, and curated-strategy gaps; 49 tests passed |
-| 2026-09-10 | Slice 4 synthetic trials prepared and reproduced | Java and Kotlin inventories and evidence bundles passed; direct Copilot calls failed closed because local authentication is absent |
-| 2026-09-10 | First deterministic interface detector implemented through contract, implementation, and independent review stages | OpenAPI 3.0/3.1/3.2 and AsyncAPI 2.x/3.x JSON operations supported; YAML remains an explicit gap; 63 tests passed |
+| 2026-09-10 | Slice 4 synthetic trials prepared and reproduced | Java and Kotlin inventories and evidence bundles passed; initial sandboxed Copilot calls could not see authentication |
+| 2026-09-10 | First deterministic interface detector implemented through contract, implementation, and independent review stages | OpenAPI 3.0/3.1/3.2 and AsyncAPI 2.x/3.x JSON operations supported; YAML remains an explicit gap; suite later reached 64 tests with Slice 4 extraction coverage |
+| 2026-09-17 | Slice 4 authenticated synthetic trials completed | Harness sandbox hid valid authentication; host runs succeeded, deterministic response extraction handled CLI progress prose, and both candidates passed evidence-bound validation |
 
 ## Risks and mitigations
 
@@ -603,8 +604,7 @@ These questions do not block documenting the plan, but they affect later impleme
 
 ## Immediate next decision
 
-Authenticate Copilot CLI locally and rerun the two already prepared Slice 4 commands to
-close its final external gate. Review the deliberately narrow Slice 6 boundary before
-choosing whether its next increment should parse YAML, inventory components and
-references, or proceed to Kafka relationship observations. Conductor and promotion
-remain deferred until the manual path is proven.
+Review the deliberately narrow Slice 6 boundary before choosing whether its next
+increment should parse YAML, inventory components and references, or proceed to Kafka
+relationship observations. Conductor and promotion remain deferred until the manual
+path is proven.

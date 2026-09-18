@@ -111,6 +111,7 @@ Candidates remain outside `catalog/`. Validation does not authorize promotion.
 ./tools/landscape sources validate REGISTRY
 ./tools/landscape sources resolve ID --registry REGISTRY
 ./tools/landscape evidence select INVENTORY --source SOURCE --output PATH
+./tools/landscape candidate extract RESPONSE --output CANDIDATE
 ./tools/landscape candidate validate CANDIDATE --evidence BUNDLE
 ./tools/landscape catalog validate CATALOG
 ./tools/landscape topology validate TOPOLOGY --sources REGISTRY --catalog CATALOG

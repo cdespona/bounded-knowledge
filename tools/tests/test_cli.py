@@ -177,6 +177,45 @@ class LandscapeCliTest(unittest.TestCase):
         self.assertEqual("", malformed.stdout)
         self.assertTrue(malformed.stderr.startswith("error: "))
 
+    def test_candidate_extract_contract(self):
+        fixtures = PROJECT / "examples" / "contracts"
+        candidate = (fixtures / "candidate-envelope.valid.json").read_text(
+            encoding="utf-8"
+        )
+        response = self.base / "candidate-response.txt"
+        response.write_text("Preparing bounded result.\n\n" + candidate, encoding="utf-8")
+        output = self.base / "nested" / "candidate.json"
+        extracted = self.run_cli("candidate", "extract", response, "--output", output)
+        self.assertEqual(0, extracted.returncode)
+        self.assertEqual("", extracted.stdout)
+        self.assertEqual("", extracted.stderr)
+        self.assertEqual(json.loads(candidate), json.loads(output.read_text(encoding="utf-8")))
+
+        multiple = self.base / "multiple-response.txt"
+        multiple.write_text(candidate + candidate, encoding="utf-8")
+        rejected = self.run_cli(
+            "candidate", "extract", multiple, "--output", self.base / "rejected.json"
+        )
+        self.assertEqual(1, rejected.returncode)
+        self.assertEqual("", rejected.stdout)
+        self.assertTrue(rejected.stderr.startswith("error: "))
+        self.assertFalse((self.base / "rejected.json").exists())
+
+        for name, content in (
+            ("empty", "No candidate object was produced.\n"),
+            ("array", "[{}]".format(candidate)),
+        ):
+            invalid_response = self.base / "{}-response.txt".format(name)
+            invalid_output = self.base / "{}-candidate.json".format(name)
+            invalid_response.write_text(content, encoding="utf-8")
+            invalid = self.run_cli(
+                "candidate", "extract", invalid_response, "--output", invalid_output
+            )
+            self.assertEqual(1, invalid.returncode, name)
+            self.assertEqual("", invalid.stdout, name)
+            self.assertTrue(invalid.stderr.startswith("error: "), name)
+            self.assertFalse(invalid_output.exists(), name)
+
     def test_catalog_validate_contract(self):
         fixtures = PROJECT / "examples" / "contracts"
         catalog = fixtures / "landscape-catalog.valid.json"

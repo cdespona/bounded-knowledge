@@ -71,21 +71,39 @@ copilot -C "$PWD" \
   --no-remote \
   --no-remote-export \
   --silent \
-  --prompt "Analyze only work/REPOSITORY.evidence.json. Return the candidate JSON only. Use ANALYZED_AT for every analyzedAt value." \
-  > work/REPOSITORY.candidate.json
+  --prompt "Analyze only work/REPOSITORY.evidence.json. Return exactly one candidate JSON object and no prose or Markdown. The first output character must be { and the last must be }. Use ANALYZED_AT for every analyzedAt value." \
+  > work/REPOSITORY.response.txt
+
+./tools/landscape candidate extract \
+  work/REPOSITORY.response.txt \
+  --output work/REPOSITORY.candidate.json
 
 ./tools/landscape candidate validate \
   work/REPOSITORY.candidate.json \
   --evidence work/REPOSITORY.evidence.json
 ```
 
-The shell owns the output redirection; Copilot has no write tool. The CLI flags also
+The shell owns the raw-response redirection; Copilot has no write tool. `candidate
+extract` requires exactly one JSON object in that response, rejects zero or multiple
+objects, and writes stable JSON. It does not make the object trusted; the following
+candidate validation remains mandatory. The CLI flags also
 disable built-in MCP access, temporary-directory access, follow-up questions, and remote
 session control. Do not add `--allow-all`, `--allow-all-tools`, or `--allow-all-paths`.
 
+GitHub Copilot CLI `1.0.83` was observed to prepend a progress sentence even with
+`--silent` and explicit JSON-only instructions. Preserve that raw response and use the
+deterministic extraction step instead of shell text filtering.
+
+When running through an execution harness, first distinguish harness credential
+isolation from a real login failure. In the validated local setup, the sandboxed process
+could not see Copilot authentication while the same view-only command succeeded outside
+the harness sandbox. Grant only the single bounded Copilot command the minimum required
+host access; do not broaden the cartographer's tools or readable paths.
+
 ## Completion gate
 
-Slice 4 is complete when candidate validation is fixture- and CLI-tested, all identity and
-evidence-reference mismatches fail closed, candidate output remains outside canonical
-directories, and direct read-only trials against both synthetic repositories produce
-candidates that pass the deterministic validator. Conductor and promotion remain deferred.
+Slice 4 is complete when response extraction and candidate validation are fixture- and
+CLI-tested, zero or multiple response objects and all identity or evidence-reference
+mismatches fail closed, candidate output remains outside canonical directories, and
+direct read-only trials against both synthetic repositories produce extracted candidates
+that pass the deterministic validator. Conductor and promotion remain deferred.

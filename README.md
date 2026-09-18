@@ -41,6 +41,7 @@ dependencies.
 ./tools/landscape sources validate sources.json
 ./tools/landscape sources resolve application-id --registry sources.json
 ./tools/landscape evidence select work/application-id.json --source /path/to/repository --output work/application-id-evidence.json
+./tools/landscape candidate extract work/application-id-response.txt --output work/application-id-candidate.json
 ./tools/landscape candidate validate work/application-id-candidate.json --evidence work/application-id-evidence.json
 ./tools/landscape catalog validate work/landscape-catalog.json
 ./tools/landscape topology validate work/source-topology.json --sources sources.json --catalog work/landscape-catalog.json
@@ -77,9 +78,10 @@ visible gaps for unsupported versions, malformed structures, duplicate JSON keys
 matching YAML documents. YAML contents are not parsed in detector version 1. The exact
 boundary is documented in `docs/contracts/slice-6-api-inventory.md`.
 
-Model-produced candidates are validated against the exact selected evidence bundle before
-they can reach a later human gate. The read-only repository cartographer and its direct
-Copilot CLI trial procedure are documented in `docs/contracts/slice-4.md`.
+Captured model responses are deterministically reduced to exactly one JSON object, then
+validated against the exact selected evidence bundle before they can reach a later human
+gate. The read-only repository cartographer and its direct Copilot CLI trial procedure are
+documented in `docs/contracts/slice-4.md`.
 
 The canonical knowledge-model and source-topology contracts distinguish logical
 applications and deployables from physical repositories and monorepo subpaths. `catalog

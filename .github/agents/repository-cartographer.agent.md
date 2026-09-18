@@ -15,6 +15,40 @@ Return only one JSON object conforming to `schemas/candidate-envelope.schema.jso
 wrap it in Markdown. Copy `repository`, `kind`, `commit`, and `id` from the bundle into the
 candidate's corresponding identity fields.
 
+The schema file is intentionally outside your readable input. Use exactly this
+self-contained output shape and do not add fields:
+
+```json
+{
+  "schemaVersion": 1,
+  "repository": "BUNDLE.repository",
+  "kind": "BUNDLE.kind",
+  "analyzedCommit": "BUNDLE.commit",
+  "evidenceBundleId": "BUNDLE.id",
+  "proposedProfile": {
+    "schemaVersion": 1,
+    "repository": "BUNDLE.repository",
+    "kind": "BUNDLE.kind",
+    "analyzedCommit": "BUNDLE.commit",
+    "claims": [],
+    "openQuestions": []
+  }
+}
+```
+
+Every claim contains exactly `id`, `statement`, `status`, `confidence`, `evidence`,
+`counterevidence`, and `analyzedAt`. An `unknown` claim additionally contains
+`missingEvidence` as a non-empty array of strings; omit that field from confirmed and
+inferred claims. Confidence is
+exactly `high`, `medium`, or `low`. Do not put `analyzedAt`, `claims`, `commit`, `id`, or
+`openQuestions` at the envelope root. Your first output character must be `{` and your
+last output character must be `}`; do not announce that you will read the bundle.
+
+Every evidence and counterevidence item contains exactly `repository`, `commit`, `path`,
+`lines`, and `observationId`. Both fields are arrays even when empty. `openQuestions`
+contains strings only. Use the timestamp supplied in the request for every claim's
+`analyzedAt`.
+
 For every evidence or counterevidence reference:
 
 - use the bundle repository and commit;
