@@ -78,6 +78,14 @@ visible gaps for unsupported versions, malformed structures, duplicate JSON keys
 matching YAML documents. YAML contents are not parsed in detector version 1. The exact
 boundary is documented in `docs/contracts/slice-6-api-inventory.md`.
 
+Discovery also inventories a narrow allowlist of literal Kafka topic declarations,
+producer sends, consumer registrations, producer-default properties, and Schema Registry
+subject lookups in safe Java, Kotlin, and application-properties files. Exact Kafka
+imports and same-file typed receiver bindings prevent arbitrary strings, methods, and
+annotations from becoming Kafka evidence. Dynamic, interpolated, ambiguous, malformed,
+and unsupported forms remain visible gaps. The exact static-only boundary is documented
+in `docs/contracts/slice-7-kafka-inventory.md`.
+
 Captured model responses are deterministically reduced to exactly one JSON object, then
 validated against the exact selected evidence bundle before they can reach a later human
 gate. The read-only repository cartographer and its direct Copilot CLI trial procedure are

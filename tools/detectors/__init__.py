@@ -5,6 +5,7 @@ from .git import GitDetector
 from .gradle import GradleManifestDetector
 from .maven import MavenManifestDetector
 from .api_contract import ApiContractDetector
+from .kafka_literals import KafkaLiteralDetector
 
 
 def built_in_detectors():
@@ -14,4 +15,5 @@ def built_in_detectors():
         MavenManifestDetector(),
         GradleManifestDetector(),
         ApiContractDetector(),
+        KafkaLiteralDetector(),
     ]

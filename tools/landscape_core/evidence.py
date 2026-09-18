@@ -15,7 +15,7 @@ MAX_RANGES_PER_FILE = 16
 MAX_LINES_PER_SELECTION = 200
 MAX_CONTENT_BYTES = 16 * 1024
 MAX_TOTAL_CONTENT_BYTES = 256 * 1024
-GAP_KINDS = {"api-gap", "manifest-gap"}
+GAP_KINDS = {"api-gap", "kafka-gap", "manifest-gap"}
 
 
 def inventory_digest(document):

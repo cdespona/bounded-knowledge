@@ -22,10 +22,32 @@ MANIFEST_KINDS = {
     "manifest-gap",
 }
 API_KINDS = {"api-document", "api-operation", "api-gap"}
+KAFKA_KINDS = {"kafka-topic-reference", "kafka-schema-reference", "kafka-gap"}
 API_SPECIFICATIONS = {"openapi", "asyncapi"}
 API_SERIALIZATIONS = {"json", "yaml"}
 HTTP_ACTIONS = {
     "delete", "get", "head", "options", "patch", "post", "put", "query", "trace"
+}
+KAFKA_TOPIC_ROLE_FORMS = {
+    "declaration": "new-topic",
+    "producer-send": "kafka-template-send",
+    "producer-default": "default-topic-property",
+    "consumer-registration": "kafka-listener",
+}
+KAFKA_GAP_CONTEXTS = {
+    "topic-declaration",
+    "producer-send",
+    "consumer-registration",
+    "schema-reference",
+    "configuration",
+}
+KAFKA_GAP_FORMS = {
+    "new-topic",
+    "kafka-template-send",
+    "kafka-listener",
+    "schema-registry-subject-lookup",
+    "default-topic-property",
+    "kafka-source",
 }
 CATALOG_COLLECTION_TYPES = {
     "applications": "application",
@@ -273,6 +295,56 @@ def validate_api_observation(item, prefix="observation"):
 
     if "operationId" in value and not _is_non_empty_string(value["operationId"]):
         errors.append("{}.value.operationId must be a non-empty string".format(prefix))
+    return errors
+
+
+def validate_kafka_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for a literal Kafka observation."""
+    if not isinstance(item, dict):
+        return ["{} must be an object".format(prefix)]
+    kind = item.get("kind")
+    if not isinstance(kind, str) or kind not in KAFKA_KINDS:
+        return ["{}.kind is not a Kafka observation kind".format(prefix)]
+
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    if not isinstance(value, dict):
+        return errors + ["{}.value must be an object".format(prefix)]
+
+    if kind == "kafka-topic-reference":
+        if not _exact_fields(value, {"role", "form", "topic"}):
+            errors.append("{}.value has invalid kafka-topic-reference fields".format(prefix))
+        role = value.get("role")
+        if role not in KAFKA_TOPIC_ROLE_FORMS:
+            errors.append("{}.value.role is invalid".format(prefix))
+        elif value.get("form") != KAFKA_TOPIC_ROLE_FORMS[role]:
+            errors.append("{}.value.role and form disagree".format(prefix))
+        if not _is_non_empty_string(value.get("topic")):
+            errors.append("{}.value.topic must be a non-empty string".format(prefix))
+    elif kind == "kafka-schema-reference":
+        if not _exact_fields(value, {"role", "form", "subject"}):
+            errors.append("{}.value has invalid kafka-schema-reference fields".format(prefix))
+        if value.get("role") != "schema-lookup":
+            errors.append("{}.value.role must be schema-lookup".format(prefix))
+        if value.get("form") != "schema-registry-subject-lookup":
+            errors.append(
+                "{}.value.form must be schema-registry-subject-lookup".format(prefix)
+            )
+        if not _is_non_empty_string(value.get("subject")):
+            errors.append("{}.value.subject must be a non-empty string".format(prefix))
+    else:
+        required = {"context", "form", "code", "detail"}
+        if not _exact_fields(value, required):
+            errors.append("{}.value has invalid kafka-gap fields".format(prefix))
+        if value.get("context") not in KAFKA_GAP_CONTEXTS:
+            errors.append("{}.value.context is invalid".format(prefix))
+        if value.get("form") not in KAFKA_GAP_FORMS:
+            errors.append("{}.value.form is invalid".format(prefix))
+        code = value.get("code")
+        if not isinstance(code, str) or not REPOSITORY_ID.fullmatch(code):
+            errors.append("{}.value.code must be lowercase kebab-case".format(prefix))
+        if not _is_non_empty_string(value.get("detail")):
+            errors.append("{}.value.detail must be a non-empty string".format(prefix))
     return errors
 
 

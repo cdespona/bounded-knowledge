@@ -16,6 +16,7 @@ from landscape_core.contracts import (  # noqa: E402
     validate_api_observation,
     validate_candidate_envelope,
     validate_evidence_bundle,
+    validate_kafka_observation,
     validate_landscape_catalog,
     validate_manifest_observation,
     validate_source_registry,
@@ -72,6 +73,38 @@ class ContractTest(unittest.TestCase):
         moved = observation(source_lines="9-11", value=value, **common)
         changed = observation(
             source_lines="8-10", value=dict(value, target="/customers"), **common
+        )
+        self.assertEqual(3, len({first["id"], moved["id"], changed["id"]}))
+
+    def test_kafka_observation_examples(self):
+        for index, item in enumerate(load("kafka-observations.valid.json")):
+            self.assertEqual([], validate_kafka_observation(item), index)
+        for index, item in enumerate(load("kafka-observations.invalid.json")):
+            self.assertTrue(validate_kafka_observation(item), index)
+
+    def test_kafka_observation_lines_and_literals_are_part_of_identity(self):
+        common = {
+            "kind": "kafka-topic-reference",
+            "repository": "synthetic-kotlin-service",
+            "commit": "a" * 40,
+            "detector": "kafka-literals",
+            "detector_version": 1,
+            "source_path": (
+                "src/main/kotlin/com/example/mercurio/customer/"
+                "CustomerEventPublisher.kt"
+            ),
+        }
+        value = {
+            "role": "producer-send",
+            "form": "kafka-template-send",
+            "topic": "customer-updated",
+        }
+        first = observation(source_lines="12", value=value, **common)
+        moved = observation(source_lines="13", value=value, **common)
+        changed = observation(
+            source_lines="12",
+            value=dict(value, topic="customer-created"),
+            **common
         )
         self.assertEqual(3, len({first["id"], moved["id"], changed["id"]}))
 

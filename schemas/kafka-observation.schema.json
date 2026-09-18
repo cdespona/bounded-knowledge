@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/kafka-observation.schema.json",
+  "title": "Literal Kafka observation contract",
+  "type": "object",
+  "required": ["kind", "source", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "kafka-topic-reference",
+        "kafka-schema-reference",
+        "kafka-gap"
+      ]
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "value": {
+      "oneOf": [
+        { "$ref": "#/$defs/topicReference" },
+        { "$ref": "#/$defs/schemaReference" },
+        { "$ref": "#/$defs/kafkaGap" }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": { "const": "kafka-topic-reference" },
+        "value": { "$ref": "#/$defs/topicReference" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "kafka-schema-reference" },
+        "value": { "$ref": "#/$defs/schemaReference" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "kafka-gap" },
+        "value": { "$ref": "#/$defs/kafkaGap" }
+      }
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+      }
+    },
+    "topicReference": {
+      "type": "object",
+      "required": ["role", "form", "topic"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "declaration",
+            "producer-send",
+            "producer-default",
+            "consumer-registration"
+          ]
+        },
+        "form": {
+          "enum": [
+            "new-topic",
+            "kafka-template-send",
+            "default-topic-property",
+            "kafka-listener"
+          ]
+        },
+        "topic": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "role": { "const": "declaration" },
+            "form": { "const": "new-topic" }
+          }
+        },
+        {
+          "properties": {
+            "role": { "const": "producer-send" },
+            "form": { "const": "kafka-template-send" }
+          }
+        },
+        {
+          "properties": {
+            "role": { "const": "producer-default" },
+            "form": { "const": "default-topic-property" }
+          }
+        },
+        {
+          "properties": {
+            "role": { "const": "consumer-registration" },
+            "form": { "const": "kafka-listener" }
+          }
+        }
+      ]
+    },
+    "schemaReference": {
+      "type": "object",
+      "required": ["role", "form", "subject"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "const": "schema-lookup" },
+        "form": { "const": "schema-registry-subject-lookup" },
+        "subject": { "type": "string", "minLength": 1 }
+      }
+    },
+    "kafkaGap": {
+      "type": "object",
+      "required": ["context", "form", "code", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "enum": [
+            "topic-declaration",
+            "producer-send",
+            "consumer-registration",
+            "schema-reference",
+            "configuration"
+          ]
+        },
+        "form": {
+          "enum": [
+            "new-topic",
+            "kafka-template-send",
+            "kafka-listener",
+            "schema-registry-subject-lookup",
+            "default-topic-property",
+            "kafka-source"
+          ]
+        },
+        "code": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

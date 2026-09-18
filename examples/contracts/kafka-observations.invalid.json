@@ -1,0 +1,47 @@
+[
+  {
+    "kind": "kafka-topic-reference",
+    "source": { "lines": "12", "path": "src/main/java/example/KafkaTopics.java" },
+    "value": {
+      "form": "kafka-template-send",
+      "role": "declaration",
+      "topic": "customer.created"
+    }
+  },
+  {
+    "kind": "kafka-topic-reference",
+    "source": { "lines": "8-4", "path": "../application.properties" },
+    "value": {
+      "form": "default-topic-property",
+      "role": "producer-default",
+      "topic": ""
+    }
+  },
+  {
+    "kind": "kafka-schema-reference",
+    "source": { "lines": "31", "path": "src/main/kotlin/example/CustomerSchema.kt" },
+    "value": {
+      "form": "schema-registry-subject-lookup",
+      "role": "producer-send",
+      "subject": "customer-created-value"
+    }
+  },
+  {
+    "kind": "kafka-gap",
+    "source": { "lines": "26", "path": "src/main/kotlin/example/CustomerListener.kt" },
+    "value": {
+      "code": "SPREAD_TOPIC",
+      "context": "listener",
+      "form": "kafka-listener"
+    }
+  },
+  {
+    "kind": "kafka-schema-reference",
+    "source": { "lines": "17", "path": "src/main/java/example/CustomerPublisher.java" },
+    "value": {
+      "form": "kafka-template-send",
+      "role": "producer-send",
+      "topic": "customer.updated"
+    }
+  }
+]
