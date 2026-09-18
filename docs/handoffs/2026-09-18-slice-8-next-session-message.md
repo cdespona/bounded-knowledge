@@ -18,6 +18,10 @@ Before acting, read `AGENTS.md`, `README.md`, and the complete handoff:
 
 `docs/handoffs/2026-09-18-slice-8-container-images-handoff.md`
 
+Also read and maintain the cross-slice deferred-capabilities register:
+
+`docs/initiative/deferred-capabilities.md`
+
 Follow the contract-first → implementation → independent-review sequence described in
 the handoff. Use parallel agents only for genuinely isolated, non-overlapping work:
 begin with parallel read-only contract research, false-positive analysis, and
@@ -49,5 +53,7 @@ deployment-file positives only if contract research proves a safe candidate and 
 boundary; otherwise defer them explicitly.
 
 Run portable schema parity checks, the complete deterministic suite, and Git diff/status
-checks. At completion report changed files, validation, known gaps, independent-review
-findings, exact dirty state, and whether commit/push authorization remains pending.
+checks. Update the deferred-capabilities register to mark same-slice implementations as
+`delivered-in-slice` and preserve newly excluded capabilities. At completion report
+changed files, validation, known gaps, register changes, independent-review findings,
+exact dirty state, and whether commit/push authorization remains pending.

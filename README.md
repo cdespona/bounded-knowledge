@@ -27,6 +27,11 @@ contracts are stable. No Conductor workflow is part of the first milestone.
 | `work/` | Temporary and generated analysis artifacts; ignored by Git |
 | `workflows/` | Conductor workflows, added after script contracts are stable |
 
+Capabilities intentionally excluded from completed slices are tracked in
+`docs/initiative/deferred-capabilities.md`. The register distinguishes plausible future
+work from permanent safety and semantic boundaries, and must be updated when a later
+slice delivers or newly defers a capability.
+
 ## Deterministic commands
 
 The tooling requires Python 3.9 or later and Git. It has no third-party runtime

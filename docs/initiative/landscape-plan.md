@@ -495,6 +495,9 @@ Implement small, fixture-tested detectors in this approximate order:
 7. Git-history inputs for static co-change candidates.
 
 Each detector must state supported forms and emit visible gaps for unsupported constructs.
+Cross-slice omissions and possible future extensions are preserved in
+`docs/initiative/deferred-capabilities.md`; completing a slice must update that register
+rather than leaving deferred capabilities only in historical prose.
 
 ### Milestone 4: manual pilot
 

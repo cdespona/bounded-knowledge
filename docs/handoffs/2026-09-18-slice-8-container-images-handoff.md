@@ -66,28 +66,29 @@ Read these before defining the contract:
 2. `README.md`
 3. `docs/initiative/landscape-plan.md`, especially evidence semantics, roadmap, and the
    immediate next decision
-4. `docs/contracts/slice-1.md`
-5. `docs/contracts/slice-3.md`
-6. `docs/contracts/slice-6-api-inventory.md`
-7. `docs/contracts/slice-7-kafka-inventory.md`
-8. `schemas/observation.schema.json`
-9. `schemas/api-observation.schema.json`
-10. `schemas/kafka-observation.schema.json`
-11. `tools/detectors/__init__.py`
-12. `tools/detectors/generic_files.py`
-13. `tools/detectors/manifest_files.py`
-14. `tools/detectors/api_contract.py`
-15. `tools/detectors/kafka_literals.py`
-16. `tools/landscape_core/discovery.py`
-17. `tools/landscape_core/observations.py`
-18. `tools/landscape_core/validation.py`
-19. `tools/landscape_core/contracts.py`
-20. `tools/landscape_core/evidence.py`
-21. `tools/landscape_core/safety.py`
-22. API and Kafka valid/invalid contract fixtures
-23. `tools/tests/test_api_contract.py`, `test_kafka_inventory.py`, `test_contracts.py`,
+4. `docs/initiative/deferred-capabilities.md`, especially the Slice 8 planned entries
+5. `docs/contracts/slice-1.md`
+6. `docs/contracts/slice-3.md`
+7. `docs/contracts/slice-6-api-inventory.md`
+8. `docs/contracts/slice-7-kafka-inventory.md`
+9. `schemas/observation.schema.json`
+10. `schemas/api-observation.schema.json`
+11. `schemas/kafka-observation.schema.json`
+12. `tools/detectors/__init__.py`
+13. `tools/detectors/generic_files.py`
+14. `tools/detectors/manifest_files.py`
+15. `tools/detectors/api_contract.py`
+16. `tools/detectors/kafka_literals.py`
+17. `tools/landscape_core/discovery.py`
+18. `tools/landscape_core/observations.py`
+19. `tools/landscape_core/validation.py`
+20. `tools/landscape_core/contracts.py`
+21. `tools/landscape_core/evidence.py`
+22. `tools/landscape_core/safety.py`
+23. API and Kafka valid/invalid contract fixtures
+24. `tools/tests/test_api_contract.py`, `test_kafka_inventory.py`, `test_contracts.py`,
     `test_landscape.py`, and `test_cli.py`
-24. Both synthetic Java and Kotlin fixtures
+25. Both synthetic Java and Kotlin fixtures
 
 ## Slice 8 objective
 
@@ -226,6 +227,9 @@ Slice 8 is complete only when:
 10. Independent read-only review has no unresolved correctness or safety issue.
 11. Final reporting lists changed files, validation, known gaps, review findings, exact
     dirty state, and pending commit/push authorization.
+12. `docs/initiative/deferred-capabilities.md` marks implemented Slice 8 entries as
+    `delivered-in-slice`, retains deferred entries, and records any newly excluded
+    capability classes or permanent boundaries.
 
 Run the complete suite with:
 
