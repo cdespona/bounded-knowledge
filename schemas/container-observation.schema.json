@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/container-observation.schema.json",
+  "title": "Literal container image observation contract",
+  "type": "object",
+  "required": ["kind", "source", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "container-image-reference",
+        "container-stage-reference",
+        "container-gap"
+      ]
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "value": {
+      "oneOf": [
+        { "$ref": "#/$defs/imageReference" },
+        { "$ref": "#/$defs/stageReference" },
+        { "$ref": "#/$defs/containerGap" }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": { "const": "container-image-reference" },
+        "value": { "$ref": "#/$defs/imageReference" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "container-stage-reference" },
+        "value": { "$ref": "#/$defs/stageReference" }
+      }
+    },
+    {
+      "properties": {
+        "kind": { "const": "container-gap" },
+        "value": { "$ref": "#/$defs/containerGap" }
+      }
+    }
+  ],
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$",
+          "not": { "pattern": "[\\r\\n\\u2028\\u2029]" }
+        }
+      }
+    },
+    "stageAlias": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "not": { "pattern": "[\\r\\n\\u2028\\u2029]" }
+    },
+    "externalImageReference": {
+      "type": "object",
+      "required": ["role", "form", "image"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "const": "base-image" },
+        "form": { "const": "dockerfile-from" },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?:[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?::[0-9]+)?/)?[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(?:@[A-Za-z][A-Za-z0-9_.+-]*:[A-Za-z0-9=_+.-]{32,})?$",
+          "not": {
+            "anyOf": [
+              { "const": "scratch" },
+              { "pattern": "[\\r\\n\\u2028\\u2029]" }
+            ]
+          }
+        },
+        "stageAlias": { "$ref": "#/$defs/stageAlias" }
+      }
+    },
+    "scratchReference": {
+      "type": "object",
+      "required": ["role", "form", "image"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "const": "scratch-base" },
+        "form": { "const": "dockerfile-from" },
+        "image": { "const": "scratch" },
+        "stageAlias": { "$ref": "#/$defs/stageAlias" }
+      }
+    },
+    "imageReference": {
+      "oneOf": [
+        { "$ref": "#/$defs/externalImageReference" },
+        { "$ref": "#/$defs/scratchReference" }
+      ]
+    },
+    "stageReference": {
+      "type": "object",
+      "required": ["role", "form", "stage"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "const": "build-stage-base" },
+        "form": { "const": "dockerfile-from-stage" },
+        "stage": { "$ref": "#/$defs/stageAlias" },
+        "stageAlias": { "$ref": "#/$defs/stageAlias" }
+      }
+    },
+    "containerGap": {
+      "type": "object",
+      "required": ["context", "form", "code", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "context": { "const": "dockerfile-from" },
+        "form": { "const": "dockerfile-from" },
+        "code": {
+          "enum": [
+            "dynamic-image-reference",
+            "templated-image-reference",
+            "unsupported-from-option",
+            "unsupported-from-continuation",
+            "unsupported-escape-directive",
+            "unsupported-heredoc",
+            "malformed-from",
+            "invalid-image-reference",
+            "invalid-stage-alias",
+            "duplicate-stage-alias",
+            "ambiguous-stage-reference",
+            "unsupported-stage-source"
+          ]
+        },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

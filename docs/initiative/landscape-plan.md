@@ -445,6 +445,7 @@ questions.
 | Knowledge model and source topology v2 | Complete and committed | Strict schemas, representative fixtures, deterministic validators, and cross-artifact CLI validation; included in checkpoint `6eb9777` |
 | Slice 6: OpenAPI and AsyncAPI inventory | Implemented and validated | Structural JSON operations, visible YAML gaps, independent review findings closed; 64 tests pass after Slice 4 extraction coverage |
 | Slice 7: Kafka literal inventory | Implemented and validated | Bounded Java, Kotlin, and properties references with explicit gaps and static-only roles |
+| Slice 8: container-image literal inventory | Implemented and validated | Bounded Dockerfile `FROM` image, scratch, and earlier-stage references with explicit gaps |
 | Private pilot | Not started | Pilot applications are not yet selected |
 | Canonical promotion | Not started | Requires reviewed target model and pilot |
 | Local website | Not started | Information architecture defined in this plan |
@@ -570,6 +571,7 @@ Pilot acceptance criteria:
 | 2026-09-10 | First deterministic interface detector implemented through contract, implementation, and independent review stages | OpenAPI 3.0/3.1/3.2 and AsyncAPI 2.x/3.x JSON operations supported; YAML remains an explicit gap; suite later reached 64 tests with Slice 4 extraction coverage |
 | 2026-09-17 | Slice 4 authenticated synthetic trials completed | Harness sandbox hid valid authentication; host runs succeeded, deterministic response extraction handled CLI progress prose, and both candidates passed evidence-bound validation |
 | 2026-09-18 | Narrow Kafka literal inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Exact Kafka contexts gate topic and schema-subject references; unsupported forms remain visible gaps |
+| 2026-09-21 | Narrow Dockerfile container-image inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Literal external images, scratch, and earlier build stages are distinct; six review findings were closed and 93 tests passed |
 
 ## Risks and mitigations
 
@@ -609,6 +611,7 @@ These questions do not block documenting the plan, but they affect later impleme
 
 ## Immediate next decision
 
-Review the deliberately narrow Slice 7 boundary before proceeding to Kubernetes, Helm,
-Kustomize, Docker, and image-reference observations. OpenAPI/AsyncAPI YAML, broader Kafka
-forms, Conductor, and promotion remain deferred until a later explicit decision.
+Review the deliberately narrow Slice 8 Dockerfile boundary before deciding whether a
+later slice can prove complete candidate and structural contracts for Compose or
+Kubernetes JSON. Kubernetes YAML, Helm, Kustomize, broader Dockerfile and Kafka forms,
+Conductor, and promotion remain deferred until a later explicit decision.

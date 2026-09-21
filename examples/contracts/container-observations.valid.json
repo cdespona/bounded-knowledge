@@ -1,0 +1,42 @@
+[
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "1", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "registry.example.test:5000/team/builder:3.9@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "role": "base-image",
+      "stageAlias": "builder"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "4", "path": "docker/runtime.Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "scratch",
+      "role": "scratch-base",
+      "stageAlias": "empty-base"
+    }
+  },
+  {
+    "kind": "container-stage-reference",
+    "source": { "lines": "8", "path": "Dockerfile.release" },
+    "value": {
+      "form": "dockerfile-from-stage",
+      "role": "build-stage-base",
+      "stage": "builder",
+      "stageAlias": "release"
+    }
+  },
+  {
+    "kind": "container-gap",
+    "source": { "lines": "12", "path": "Dockerfile" },
+    "value": {
+      "code": "unsupported-from-option",
+      "context": "dockerfile-from",
+      "detail": "Dockerfile FROM options are outside the detector version 1 allowlist.",
+      "form": "dockerfile-from"
+    }
+  }
+]

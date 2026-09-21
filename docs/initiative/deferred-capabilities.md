@@ -166,24 +166,23 @@ Governing contract:
 
 ## Slice 8: container-image inventory
 
-Planning handoff:
-[`docs/handoffs/2026-09-18-slice-8-container-images-handoff.md`](../handoffs/2026-09-18-slice-8-container-images-handoff.md)
-
-These entries are `planned`, not frozen. Slice 8 contract research must revise their
-scope and status rather than assuming every item belongs in one implementation.
+Governing contract:
+[`docs/contracts/slice-8-container-image-inventory.md`](../contracts/slice-8-container-image-inventory.md)
 
 | ID | Candidate capability | Status | Contract question |
 | --- | --- | --- | --- |
-| `S8-P01` | Literal Dockerfile `FROM` external-image references | `planned` | Exact filename and grammar allowlist |
-| `S8-P02` | Literal tags, digests, `scratch`, and `AS` aliases | `planned` | Preserve exact strings and distinguish stage identity without normalization |
-| `S8-P03` | `--platform`, build arguments, interpolation, continuation lines, and escape directives | `planned` | Decide supported literals versus visible gap codes |
-| `S8-P04` | Later-stage and `COPY --from` references | `planned` | Distinguish earlier stage aliases from external images deterministically |
-| `S8-P05` | Docker Compose image/build references | `planned` | Decide candidate filenames and safe serialization boundary |
-| `S8-P06` | Kubernetes JSON workload image references | `planned` | Prove conventional candidates and exact Pod-template paths before inclusion |
-| `S8-P07` | Kubernetes YAML parsing and multi-document manifests | `planned` | Requires a safe YAML parser/dependency decision; do not hand-write a partial parser |
-| `S8-P08` | Helm templates/values and Kustomize bases, overlays, and image transforms | `planned` | Requires template/reference semantics without execution or remote resolution |
-| `S8-P09` | Init, ephemeral, sidecar, Job, and CronJob container locations | `planned` | Define exact workload vocabulary and independent gap behavior |
-| `S8-P10` | Registry resolution, pullability, provenance, SBOM, signing, and vulnerability data | `planned` | Separate future network/runtime/security evidence capability |
+| `S8-P01` | Literal Dockerfile `FROM` external-image references | `delivered-in-slice` | Delivered through the exact case-sensitive filename and physical-line grammar allowlist |
+| `S8-P02` | Literal tags, digests, `scratch`, and `AS` aliases | `delivered-in-slice` | Exact strings are preserved; scratch and earlier stage identity remain distinct |
+| `S8-P03` | `--platform`, build arguments, interpolation, continuation lines, and escape directives | `delivered-in-slice` | Delivered as explicit fixed-code gaps and fail-closed suppression, not positive interpretation |
+| `S8-P04` | Later-stage `FROM` references (split from the original combined `COPY --from` planning item) | `delivered-in-slice` | Earlier exact aliases in later `FROM` are delivered; `COPY --from` remains deferred as `S8-D01` |
+| `S8-P05` | Docker Compose image/build references | `deferred` | Requires an exact serialization and conventional candidate boundary |
+| `S8-P06` | Kubernetes JSON workload image references | `deferred` | Requires a complete conventional candidate and workload-shape boundary |
+| `S8-P07` | Kubernetes YAML parsing and multi-document manifests | `deferred` | Requires a safe YAML parser/dependency decision; do not hand-write a partial parser |
+| `S8-P08` | Helm templates/values and Kustomize bases, overlays, and image transforms | `deferred` | Requires template/reference semantics without execution or remote resolution |
+| `S8-P09` | Init, ephemeral, sidecar, Job, and CronJob container locations | `deferred` | Define a complete workload vocabulary and independent gap behavior with deployment parsing |
+| `S8-P10` | Registry resolution, pullability, provenance, SBOM, signing, and vulnerability data | `deferred` | Separate future network/runtime/security evidence capability |
+| `S8-D01` | Dockerfile `COPY --from` stage and external-image references | `deferred` | Requires an exact COPY grammar and stage/image ambiguity contract |
+| `S8-D02` | Arbitrary Dockerfile names and full Dockerfile grammar, parser directives, options, continuations, heredocs, and argument resolution | `deferred` | Add only through explicit grammar revisions without executing Docker or BuildKit |
 | `S8-B01` | Claiming an image is built, available, secure, deployed, running, healthy, or owned by an application from static literals | `permanent-boundary` | Requires independent runtime, security, or reviewed topology evidence |
 
 ## Maintenance rule

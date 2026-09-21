@@ -23,6 +23,9 @@ MANIFEST_KINDS = {
 }
 API_KINDS = {"api-document", "api-operation", "api-gap"}
 KAFKA_KINDS = {"kafka-topic-reference", "kafka-schema-reference", "kafka-gap"}
+CONTAINER_KINDS = {
+    "container-image-reference", "container-stage-reference", "container-gap"
+}
 API_SPECIFICATIONS = {"openapi", "asyncapi"}
 API_SERIALIZATIONS = {"json", "yaml"}
 HTTP_ACTIONS = {
@@ -48,6 +51,28 @@ KAFKA_GAP_FORMS = {
     "schema-registry-subject-lookup",
     "default-topic-property",
     "kafka-source",
+}
+CONTAINER_STAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+CONTAINER_IMAGE = re.compile(
+    r"^(?:[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?::[0-9]+)?/)?"
+    r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
+    r"(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*"
+    r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?"
+    r"(?:@[A-Za-z][A-Za-z0-9_.+-]*:[A-Za-z0-9=_+.-]{32,})?$"
+)
+CONTAINER_GAP_CODES = {
+    "dynamic-image-reference",
+    "templated-image-reference",
+    "unsupported-from-option",
+    "unsupported-from-continuation",
+    "unsupported-escape-directive",
+    "unsupported-heredoc",
+    "malformed-from",
+    "invalid-image-reference",
+    "invalid-stage-alias",
+    "duplicate-stage-alias",
+    "ambiguous-stage-reference",
+    "unsupported-stage-source",
 }
 CATALOG_COLLECTION_TYPES = {
     "applications": "application",
@@ -345,6 +370,71 @@ def validate_kafka_observation(item, prefix="observation"):
             errors.append("{}.value.code must be lowercase kebab-case".format(prefix))
         if not _is_non_empty_string(value.get("detail")):
             errors.append("{}.value.detail must be a non-empty string".format(prefix))
+    return errors
+
+
+def validate_container_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for a Dockerfile FROM observation."""
+    if not isinstance(item, dict):
+        return ["{} must be an object".format(prefix)]
+    kind = item.get("kind")
+    if not isinstance(kind, str) or kind not in CONTAINER_KINDS:
+        return ["{}.kind is not a container observation kind".format(prefix)]
+
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    if not isinstance(value, dict):
+        return errors + ["{}.value must be an object".format(prefix)]
+
+    if kind == "container-image-reference":
+        if not _exact_fields(value, {"role", "form", "image"}, {"stageAlias"}):
+            errors.append(
+                "{}.value has invalid container-image-reference fields".format(prefix)
+            )
+        role = value.get("role")
+        image = value.get("image")
+        if not isinstance(role, str) or role not in {"base-image", "scratch-base"}:
+            errors.append("{}.value.role is invalid".format(prefix))
+        if value.get("form") != "dockerfile-from":
+            errors.append("{}.value.form must be dockerfile-from".format(prefix))
+        if not _is_non_empty_string(image):
+            errors.append("{}.value.image must be a non-empty string".format(prefix))
+        elif (role == "scratch-base") != (image == "scratch"):
+            errors.append("{}.value.role and image disagree".format(prefix))
+        elif role == "base-image" and not CONTAINER_IMAGE.fullmatch(image):
+            errors.append("{}.value.image is outside the literal image grammar".format(prefix))
+    elif kind == "container-stage-reference":
+        if not _exact_fields(value, {"role", "form", "stage"}, {"stageAlias"}):
+            errors.append(
+                "{}.value has invalid container-stage-reference fields".format(prefix)
+            )
+        if value.get("role") != "build-stage-base":
+            errors.append("{}.value.role must be build-stage-base".format(prefix))
+        if value.get("form") != "dockerfile-from-stage":
+            errors.append(
+                "{}.value.form must be dockerfile-from-stage".format(prefix)
+            )
+        stage = value.get("stage")
+        if not isinstance(stage, str) or not CONTAINER_STAGE.fullmatch(stage):
+            errors.append("{}.value.stage is invalid".format(prefix))
+    else:
+        if not _exact_fields(value, {"context", "form", "code", "detail"}):
+            errors.append("{}.value has invalid container-gap fields".format(prefix))
+        if value.get("context") != "dockerfile-from":
+            errors.append("{}.value.context must be dockerfile-from".format(prefix))
+        if value.get("form") != "dockerfile-from":
+            errors.append("{}.value.form must be dockerfile-from".format(prefix))
+        code = value.get("code")
+        if not isinstance(code, str) or code not in CONTAINER_GAP_CODES:
+            errors.append("{}.value.code is invalid".format(prefix))
+        if not _is_non_empty_string(value.get("detail")):
+            errors.append("{}.value.detail must be a non-empty string".format(prefix))
+
+    alias = value.get("stageAlias")
+    if alias is not None and (
+        not isinstance(alias, str) or not CONTAINER_STAGE.fullmatch(alias)
+    ):
+        errors.append("{}.value.stageAlias is invalid".format(prefix))
     return errors
 
 

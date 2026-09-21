@@ -15,6 +15,7 @@ from landscape_core.contracts import (  # noqa: E402
     artifact_id,
     validate_api_observation,
     validate_candidate_envelope,
+    validate_container_observation,
     validate_evidence_bundle,
     validate_kafka_observation,
     validate_landscape_catalog,
@@ -107,6 +108,45 @@ class ContractTest(unittest.TestCase):
             **common
         )
         self.assertEqual(3, len({first["id"], moved["id"], changed["id"]}))
+
+    def test_container_observation_examples(self):
+        for index, item in enumerate(load("container-observations.valid.json")):
+            self.assertEqual([], validate_container_observation(item), index)
+        for index, item in enumerate(load("container-observations.invalid.json")):
+            self.assertTrue(validate_container_observation(item), index)
+        malformed_role = load("container-observations.valid.json")[0]
+        malformed_role["value"]["role"] = []
+        self.assertTrue(validate_container_observation(malformed_role))
+        malformed_code = load("container-observations.valid.json")[-1]
+        malformed_code["value"]["code"] = []
+        self.assertTrue(validate_container_observation(malformed_code))
+
+    def test_container_observation_lines_aliases_and_literals_are_identity(self):
+        common = {
+            "kind": "container-image-reference",
+            "repository": "synthetic-java-service",
+            "commit": "a" * 40,
+            "detector": "container-images",
+            "detector_version": 1,
+            "source_path": "Dockerfile",
+        }
+        value = {
+            "role": "base-image",
+            "form": "dockerfile-from",
+            "image": "example/builder:1",
+            "stageAlias": "builder",
+        }
+        first = observation(source_lines="1", value=value, **common)
+        moved = observation(source_lines="2", value=value, **common)
+        changed_image = observation(
+            source_lines="1", value=dict(value, image="example/builder:2"), **common
+        )
+        changed_alias = observation(
+            source_lines="1", value=dict(value, stageAlias="compile"), **common
+        )
+        self.assertEqual(
+            4, len({first["id"], moved["id"], changed_image["id"], changed_alias["id"]})
+        )
 
     def test_observation_inventory_examples(self):
         self.assertEqual([], validate_inventory(load("observation-inventory.valid.json")))

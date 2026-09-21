@@ -6,9 +6,11 @@ import re
 from .git_repository import commit_sha, require_repository_root
 from .contracts import (
     API_KINDS,
+    CONTAINER_KINDS,
     KAFKA_KINDS,
     MANIFEST_KINDS,
     validate_api_observation,
+    validate_container_observation,
     validate_kafka_observation,
     validate_manifest_observation,
 )
@@ -145,6 +147,8 @@ def validate_inventory(document, source=None):
             errors.extend(validate_api_observation(item, prefix))
         if item.get("kind") in KAFKA_KINDS:
             errors.extend(validate_kafka_observation(item, prefix))
+        if item.get("kind") in CONTAINER_KINDS:
+            errors.extend(validate_container_observation(item, prefix))
 
     if not isinstance(document["excluded"], list):
         errors.append("excluded must be an array")

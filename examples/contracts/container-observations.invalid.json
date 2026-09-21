@@ -1,0 +1,94 @@
+[
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "1", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from-stage",
+      "image": "example/service:1",
+      "role": "base-image"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "4", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "scratch",
+      "role": "base-image"
+    }
+  },
+  {
+    "kind": "container-stage-reference",
+    "source": { "lines": "8", "path": "Dockerfile.release" },
+    "value": {
+      "form": "dockerfile-from-stage",
+      "role": "build-stage-base",
+      "stage": ".builder"
+    }
+  },
+  {
+    "kind": "container-gap",
+    "source": { "lines": "12", "path": "Dockerfile" },
+    "value": {
+      "code": "unknown-container-gap",
+      "context": "container-image",
+      "detail": "Unknown gap values are not part of the frozen contract.",
+      "form": "dockerfile"
+    }
+  },
+  {
+    "kind": "container-stage-reference",
+    "source": { "lines": "14", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "builder",
+      "role": "base-image"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "15", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "${BASE_IMAGE}",
+      "role": "base-image"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "16", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "registry.example.test/team/image@sha256:short",
+      "role": "base-image"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "17", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "alpine:3.20\n",
+      "role": "base-image"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "18", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "alpine:3.20",
+      "role": "base-image",
+      "stageAlias": "builder\n"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "1\n", "path": "Dockerfile" },
+    "value": {
+      "form": "dockerfile-from",
+      "image": "alpine:3.20",
+      "role": "base-image"
+    }
+  }
+]

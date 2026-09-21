@@ -91,6 +91,14 @@ annotations from becoming Kafka evidence. Dynamic, interpolated, ambiguous, malf
 and unsupported forms remain visible gaps. The exact static-only boundary is documented
 in `docs/contracts/slice-7-kafka-inventory.md`.
 
+Discovery also inventories literal single-line Dockerfile `FROM` references from a
+case-sensitive filename allowlist. It distinguishes external image literals, the
+special `scratch` base, and exact references to earlier named build stages. Options,
+variables, templates, continuations, heredocs, escape directives, malformed forms, and
+ambiguous stages remain visible gaps; deployment serializations and `COPY --from` are
+deferred. The exact static-only boundary is documented in
+`docs/contracts/slice-8-container-image-inventory.md`.
+
 Captured model responses are deterministically reduced to exactly one JSON object, then
 validated against the exact selected evidence bundle before they can reach a later human
 gate. The read-only repository cartographer and its direct Copilot CLI trial procedure are

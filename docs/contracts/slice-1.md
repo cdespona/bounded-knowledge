@@ -30,6 +30,7 @@ order has no domain meaning are sorted before serialization.
 | Parsed manifest observation | `schemas/manifest-observation.schema.json` | `validate_manifest_observation` |
 | API observation | `schemas/api-observation.schema.json` | `validate_api_observation` |
 | Kafka observation | `schemas/kafka-observation.schema.json` | `validate_kafka_observation` |
+| Container image observation | `schemas/container-observation.schema.json` | `validate_container_observation` |
 | Evidence bundle | `schemas/evidence-bundle.schema.json` | `validate_evidence_bundle` |
 | Candidate envelope | `schemas/candidate-envelope.schema.json` | `validate_candidate_envelope` |
 | Repository profile | `schemas/repository-profile.schema.json` | Candidate validation |
