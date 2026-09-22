@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: order-pod
+spec:
+  containers:
+    - name: app
+      image: registry.example.invalid/orders/api:1
+  initContainers:
+    - name: migrations
+      image: registry.example.invalid/orders/migrations:1
+  ephemeralContainers:
+    - name: debugger
+      image: registry.example.invalid/operations/debugger:1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: registry.example.invalid/orders/api:2
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: order-state
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: registry.example.invalid/orders/state:1
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: order-daemon
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: registry.example.invalid/orders/daemon:1
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: order-replica
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: registry.example.invalid/orders/replica:1
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: order-job
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: registry.example.invalid/orders/job:1
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: order-cron
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: app
+              image: registry.example.invalid/orders/cron:1

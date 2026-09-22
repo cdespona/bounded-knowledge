@@ -90,5 +90,121 @@
       "image": "alpine:3.20",
       "role": "base-image"
     }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "18", "path": "manifests/deployment.yaml" },
+    "value": {
+      "apiVersion": "apps/v1",
+      "containerCategory": "containers",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/customer/api:1",
+      "pointer": "/spec/containers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "customer-api-production",
+      "workloadKind": "Pod"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "18", "path": "manifests/deployment.yaml" },
+    "value": {
+      "apiVersion": "apps/v1",
+      "containerCategory": "containers",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/customer/api:1",
+      "pointer": "/spec/template/spec/containers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "Customer-API",
+      "workloadKind": "Deployment"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "18", "path": "manifests/deployment.yaml" },
+    "value": {
+      "apiVersion": "apps/v1",
+      "containerCategory": "containers",
+      "documentIndex": -1,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/customer/api:1",
+      "pointer": "/spec/template/spec/containers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "customer-api-production",
+      "workloadKind": "Deployment"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "18", "path": "manifests/deployment.yaml" },
+    "value": {
+      "apiVersion": "apps/v1",
+      "containerCategory": "containers",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/customer/api:1",
+      "pointer": "/items/0/spec/template/spec/containers/0/~2image",
+      "role": "workload-image",
+      "sourceSelectionId": "customer-api-production",
+      "workloadKind": "Deployment"
+    }
+  },
+  {
+    "kind": "container-gap",
+    "source": { "lines": "1", "path": "manifests/custom.yaml" },
+    "value": {
+      "code": "unknown-kubernetes-gap",
+      "context": "kubernetes-workload",
+      "detail": "Unknown Kubernetes gap values are not part of the frozen contract.",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "pointer": "",
+      "sourceSelectionId": "customer-api-production"
+    }
+  },
+  {
+    "kind": "container-gap",
+    "source": { "lines": "1", "path": "manifests/custom.yaml" },
+    "value": {
+      "code": "unsupported-kubernetes-kind",
+      "context": "kubernetes-workload",
+      "detail": "A single-line but non-canonical detail is still invalid.",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "pointer": "",
+      "sourceSelectionId": "customer-api-production"
+    }
+  },
+  {
+    "kind": "container-stage-reference",
+    "source": { "lines": "18", "path": "manifests/deployment.yaml" },
+    "value": {
+      "apiVersion": "apps/v1",
+      "containerCategory": "containers",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/customer/api:1",
+      "pointer": "/spec/template/spec/containers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "customer-api-production",
+      "workloadKind": "Deployment"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": { "lines": "18", "path": "manifests/deployment.yaml" },
+    "value": {
+      "apiVersion": "apps/v1",
+      "containerCategory": "sidecars",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/customer/api:1",
+      "pointer": "/spec/template/spec/containers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "customer-api-production",
+      "workloadKind": "Deployment"
+    }
   }
 ]

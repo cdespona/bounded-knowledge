@@ -1,0 +1,18 @@
+{
+  "bindings": [],
+  "repositories": [
+    {
+      "id": "k8s-manifests",
+      "kind": "kubernetes"
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceSelections": [
+    {
+      "id": "order-api-production-kubernetes",
+      "kind": "kubernetes",
+      "repositoryId": "k8s-manifests",
+      "subpath": "k8s-capside/pro/mango/orders/order-api"
+    }
+  ]
+}

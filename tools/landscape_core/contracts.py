@@ -74,6 +74,41 @@ CONTAINER_GAP_CODES = {
     "ambiguous-stage-reference",
     "unsupported-stage-source",
 }
+KUBERNETES_GAP_DETAILS = {
+    "malformed-kubernetes-yaml": "The Kubernetes candidate is not valid YAML.",
+    "duplicate-kubernetes-key": "Duplicate YAML mapping keys are not interpreted.",
+    "unsupported-kubernetes-key": "Non-scalar YAML mapping keys are outside the version 1 contract.",
+    "unsupported-kubernetes-tag": "Explicit custom YAML tags are outside the version 1 contract.",
+    "unsupported-kubernetes-anchor": "YAML anchors are outside the version 1 direct-literal contract.",
+    "unsupported-kubernetes-alias": "YAML aliases are outside the version 1 direct-literal contract.",
+    "unsupported-kubernetes-merge": "YAML merge keys are outside the version 1 direct-literal contract.",
+    "kubernetes-parser-resource-limit": "The Kubernetes YAML candidate exceeds a version 1 parser resource limit.",
+    "invalid-kubernetes-document": "A Kubernetes YAML document must have an object root.",
+    "missing-kubernetes-type": "A Kubernetes resource requires literal apiVersion and kind strings.",
+    "unsupported-kubernetes-version": "The workload kind uses an unsupported Kubernetes API version.",
+    "unsupported-kubernetes-kind": "The Kubernetes resource kind has no version 1 workload image contract.",
+    "invalid-kubernetes-list": "A supported Kubernetes List requires an items array.",
+    "invalid-kubernetes-list-item": "A Kubernetes List item must be an object resource.",
+    "invalid-kubernetes-workload": "The supported Kubernetes workload has a malformed workload structure.",
+    "invalid-kubernetes-pod-spec": "The supported Kubernetes workload has a malformed PodSpec structure.",
+    "missing-kubernetes-containers": "A supported Kubernetes PodSpec requires a non-empty containers array.",
+    "invalid-kubernetes-container-array": "A Kubernetes container field must be an array.",
+    "invalid-kubernetes-container": "A Kubernetes container entry must be an object.",
+    "missing-kubernetes-image": "A Kubernetes container entry requires a non-empty image string.",
+    "dynamic-kubernetes-image": "A Kubernetes image value uses unsupported dynamic or template syntax.",
+    "invalid-kubernetes-image": "A Kubernetes image value is outside the conservative literal image grammar.",
+}
+KUBERNETES_GAP_CODES = set(KUBERNETES_GAP_DETAILS)
+KUBERNETES_WORKLOADS = {
+    "v1": {"Pod"},
+    "apps/v1": {"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"},
+    "batch/v1": {"Job", "CronJob"},
+}
+KUBERNETES_CONTAINER_CATEGORIES = {
+    "containers", "initContainers", "ephemeralContainers"
+}
+STRUCTURAL_POINTER = re.compile(r"^(?:/(?:[^~/\r\n\u2028\u2029]|~[01])*)*$")
+LINE_TERMINATORS = re.compile(r"[\r\n\u2028\u2029]")
 CATALOG_COLLECTION_TYPES = {
     "applications": "application",
     "deployables": "deployable",
@@ -160,6 +195,25 @@ def validate_source_reference(value, prefix="source", require_lines=False):
         errors.append(
             "{}.lines must be a non-descending positive line or line range".format(prefix)
         )
+    return errors
+
+
+def validate_source_selection(value, prefix="sourceSelection", repository=None):
+    """Validate the persisted boundary of one reviewed Kubernetes selection."""
+    required = {"id", "repositoryId", "subpath", "kind"}
+    if not _exact_fields(value, required):
+        return ["{} has invalid fields".format(prefix)]
+    errors = []
+    for field in ("id", "repositoryId"):
+        if not isinstance(value[field], str) or not REPOSITORY_ID.fullmatch(value[field]):
+            errors.append("{}.{} must be lowercase kebab-case".format(prefix, field))
+    subpath = value["subpath"]
+    if not _is_safe_topology_path(subpath):
+        errors.append("{}.subpath must be a safe relative path".format(prefix))
+    if value["kind"] != "kubernetes":
+        errors.append("{}.kind must be kubernetes".format(prefix))
+    if repository is not None and value["repositoryId"] != repository:
+        errors.append("{}.repositoryId does not match the artifact".format(prefix))
     return errors
 
 
@@ -387,6 +441,50 @@ def validate_container_observation(item, prefix="observation"):
         return errors + ["{}.value must be an object".format(prefix)]
 
     if kind == "container-image-reference":
+        if value.get("form") == "kubernetes-yaml":
+            required = {
+                "role", "form", "image", "sourceSelectionId", "apiVersion",
+                "workloadKind", "containerCategory", "documentIndex", "pointer",
+            }
+            if not _exact_fields(value, required):
+                errors.append(
+                    "{}.value has invalid Kubernetes image fields".format(prefix)
+                )
+            if value.get("role") != "workload-image":
+                errors.append("{}.value.role must be workload-image".format(prefix))
+            image = value.get("image")
+            if (
+                not _is_non_empty_string(image)
+                or image == "scratch"
+                or CONTAINER_IMAGE.fullmatch(image) is None
+            ):
+                errors.append(
+                    "{}.value.image is outside the literal image grammar".format(prefix)
+                )
+            selection_id = value.get("sourceSelectionId")
+            if (
+                not isinstance(selection_id, str)
+                or REPOSITORY_ID.fullmatch(selection_id) is None
+            ):
+                errors.append("{}.value.sourceSelectionId is invalid".format(prefix))
+            api_version = value.get("apiVersion")
+            workload_kind = value.get("workloadKind")
+            if (
+                api_version not in KUBERNETES_WORKLOADS
+                or workload_kind not in KUBERNETES_WORKLOADS.get(api_version, set())
+            ):
+                errors.append(
+                    "{}.value.apiVersion and workloadKind disagree".format(prefix)
+                )
+            if value.get("containerCategory") not in KUBERNETES_CONTAINER_CATEGORIES:
+                errors.append("{}.value.containerCategory is invalid".format(prefix))
+            document_index = value.get("documentIndex")
+            if type(document_index) is not int or document_index < 0:
+                errors.append("{}.value.documentIndex is invalid".format(prefix))
+            pointer = value.get("pointer")
+            if not isinstance(pointer, str) or STRUCTURAL_POINTER.fullmatch(pointer) is None:
+                errors.append("{}.value.pointer is invalid".format(prefix))
+            return errors
         if not _exact_fields(value, {"role", "form", "image"}, {"stageAlias"}):
             errors.append(
                 "{}.value has invalid container-image-reference fields".format(prefix)
@@ -418,6 +516,41 @@ def validate_container_observation(item, prefix="observation"):
         if not isinstance(stage, str) or not CONTAINER_STAGE.fullmatch(stage):
             errors.append("{}.value.stage is invalid".format(prefix))
     else:
+        if value.get("form") == "kubernetes-yaml":
+            required = {
+                "context", "form", "code", "detail", "sourceSelectionId",
+                "documentIndex", "pointer",
+            }
+            if not _exact_fields(value, required):
+                errors.append("{}.value has invalid Kubernetes gap fields".format(prefix))
+            if value.get("context") != "kubernetes-workload":
+                errors.append(
+                    "{}.value.context must be kubernetes-workload".format(prefix)
+                )
+            code = value.get("code")
+            if not isinstance(code, str) or code not in KUBERNETES_GAP_CODES:
+                errors.append("{}.value.code is invalid".format(prefix))
+            selection_id = value.get("sourceSelectionId")
+            if (
+                not isinstance(selection_id, str)
+                or REPOSITORY_ID.fullmatch(selection_id) is None
+            ):
+                errors.append("{}.value.sourceSelectionId is invalid".format(prefix))
+            document_index = value.get("documentIndex")
+            if type(document_index) is not int or document_index < 0:
+                errors.append("{}.value.documentIndex is invalid".format(prefix))
+            pointer = value.get("pointer")
+            if not isinstance(pointer, str) or STRUCTURAL_POINTER.fullmatch(pointer) is None:
+                errors.append("{}.value.pointer is invalid".format(prefix))
+            detail = value.get("detail")
+            if (
+                not _is_non_empty_string(detail)
+                or LINE_TERMINATORS.search(detail) is not None
+                or not isinstance(code, str)
+                or detail != KUBERNETES_GAP_DETAILS.get(code)
+            ):
+                errors.append("{}.value.detail must match its fixed gap code".format(prefix))
+            return errors
         if not _exact_fields(value, {"context", "form", "code", "detail"}):
             errors.append("{}.value has invalid container-gap fields".format(prefix))
         if value.get("context") != "dockerfile-from":
@@ -427,8 +560,12 @@ def validate_container_observation(item, prefix="observation"):
         code = value.get("code")
         if not isinstance(code, str) or code not in CONTAINER_GAP_CODES:
             errors.append("{}.value.code is invalid".format(prefix))
-        if not _is_non_empty_string(value.get("detail")):
-            errors.append("{}.value.detail must be a non-empty string".format(prefix))
+        detail = value.get("detail")
+        if (
+            not _is_non_empty_string(detail)
+            or LINE_TERMINATORS.search(detail) is not None
+        ):
+            errors.append("{}.value.detail must be a single-line string".format(prefix))
 
     alias = value.get("stageAlias")
     if alias is not None and (
@@ -548,7 +685,7 @@ def validate_evidence_bundle(document):
         "schemaVersion", "id", "repository", "kind", "commit", "inventorySha256",
         "selectedEvidence", "gaps", "excluded",
     }
-    if not _exact_fields(document, required):
+    if not _exact_fields(document, required, {"sourceSelection"}):
         return ["evidence bundle has invalid fields"]
     errors = []
     if document["schemaVersion"] != 1:
@@ -567,6 +704,15 @@ def validate_evidence_bundle(document):
         document["inventorySha256"]
     ):
         errors.append("inventorySha256 is invalid")
+    source_selection = document.get("sourceSelection")
+    if source_selection is not None:
+        errors.extend(validate_source_selection(
+            source_selection, "sourceSelection", document.get("repository")
+        ))
+        if document.get("kind") != "kubernetes":
+            errors.append("sourceSelection requires kind kubernetes")
+    if document.get("kind") == "kubernetes" and not isinstance(source_selection, dict):
+        errors.append("kind kubernetes requires sourceSelection")
 
     evidence = document["selectedEvidence"]
     if not isinstance(evidence, list):
@@ -584,6 +730,10 @@ def validate_evidence_bundle(document):
             errors.extend(validate_source_reference(
                 {"path": item["path"], "lines": item["lines"]}, prefix, True
             ))
+            if isinstance(source_selection, dict) and not _path_is_at_or_below(
+                item.get("path"), source_selection.get("subpath")
+            ):
+                errors.append("{}.path is outside sourceSelection".format(prefix))
             content = item["content"]
             digest = (
                 hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -623,6 +773,10 @@ def validate_evidence_bundle(document):
             if not _is_non_empty_string(item["code"]) or not _is_non_empty_string(item["detail"]):
                 errors.append("{} code and detail must be non-empty".format(prefix))
             errors.extend(validate_source_reference(item["source"], prefix + ".source", True))
+            if isinstance(source_selection, dict) and not _path_is_at_or_below(
+                item.get("source", {}).get("path"), source_selection.get("subpath")
+            ):
+                errors.append("{}.source.path is outside sourceSelection".format(prefix))
             source = item["source"]
             if (
                 isinstance(source, dict)
@@ -652,6 +806,12 @@ def validate_evidence_bundle(document):
                 errors.append("excluded[{}] is invalid".format(index))
             elif isinstance(item["path"], str) and isinstance(item["reason"], str):
                 excluded_order.append((item["path"], item["reason"]))
+                if isinstance(source_selection, dict) and not _path_is_at_or_below(
+                    item["path"], source_selection.get("subpath")
+                ):
+                    errors.append(
+                        "excluded[{}].path is outside sourceSelection".format(index)
+                    )
         if excluded_order != sorted(excluded_order):
             errors.append("excluded must be sorted by path and reason")
     return errors
@@ -1128,6 +1288,8 @@ def _is_safe_topology_path(value):
 
 
 def _path_is_at_or_below(child, parent):
+    if not isinstance(child, str) or not isinstance(parent, str):
+        return False
     if child == ".":
         return False
     child_parts = PurePosixPath(child).parts

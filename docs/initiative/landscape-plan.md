@@ -446,6 +446,7 @@ questions.
 | Slice 6: OpenAPI and AsyncAPI inventory | Implemented and validated | Structural JSON operations, visible YAML gaps, independent review findings closed; 64 tests pass after Slice 4 extraction coverage |
 | Slice 7: Kafka literal inventory | Implemented and validated | Bounded Java, Kotlin, and properties references with explicit gaps and static-only roles |
 | Slice 8: container-image literal inventory | Implemented and validated | Bounded Dockerfile `FROM` image, scratch, and earlier-stage references with explicit gaps |
+| Slice 9: Kubernetes YAML workload-image inventory | Implemented and validated | One reviewed Kubernetes source selection, stable workload/List matrix, literal images, and bounded non-leaking YAML gaps |
 | Private pilot | Not started | Pilot applications are not yet selected |
 | Canonical promotion | Not started | Requires reviewed target model and pilot |
 | Local website | Not started | Information architecture defined in this plan |
@@ -572,6 +573,7 @@ Pilot acceptance criteria:
 | 2026-09-17 | Slice 4 authenticated synthetic trials completed | Harness sandbox hid valid authentication; host runs succeeded, deterministic response extraction handled CLI progress prose, and both candidates passed evidence-bound validation |
 | 2026-09-18 | Narrow Kafka literal inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Exact Kafka contexts gate topic and schema-subject references; unsupported forms remain visible gaps |
 | 2026-09-21 | Narrow Dockerfile container-image inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Literal external images, scratch, and earlier build stages are distinct; six review findings were closed and 93 tests passed |
+| 2026-09-22 | Selection-scoped Kubernetes YAML workload-image inventory implemented after contract research and an explicit user decision | Plain YAML, one reviewed topology selection, stable workload/List forms, three container categories, and safe bounded parsing are supported; five independent-review findings were closed and 107 tests passed; Compose and Kubernetes JSON remain deferred |
 
 ## Risks and mitigations
 
@@ -611,7 +613,8 @@ These questions do not block documenting the plan, but they affect later impleme
 
 ## Immediate next decision
 
-Review the deliberately narrow Slice 8 Dockerfile boundary before deciding whether a
-later slice can prove complete candidate and structural contracts for Compose or
-Kubernetes JSON. Kubernetes YAML, Helm, Kustomize, broader Dockerfile and Kafka forms,
-Conductor, and promotion remain deferred until a later explicit decision.
+Choose the next detector only through a new explicit user decision after reviewing the
+Slice 9 boundary and remaining deferred-capability register. No roadmap detector is
+selected automatically. Compose, Kubernetes JSON, Helm, Kustomize, broader Dockerfile
+and Kafka forms, Terraform, Conductor, the private pilot, and promotion remain deferred
+until their own contract research and authorization.

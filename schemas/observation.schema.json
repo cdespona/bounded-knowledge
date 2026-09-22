@@ -5,10 +5,33 @@
   "type": "object",
   "required": ["schemaVersion", "repository", "commit", "detectors", "observations", "excluded"],
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "observations": {
+            "contains": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": {
+                  "type": "object",
+                  "required": ["form"],
+                  "properties": { "form": { "const": "kubernetes-yaml" } }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": { "required": ["sourceSelection"] }
+    }
+  ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "repository": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
     "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "sourceSelection": { "$ref": "#/$defs/sourceSelection" },
     "detectors": {
       "type": "array",
       "items": {
@@ -39,6 +62,20 @@
     }
   },
   "$defs": {
+    "sourceSelection": {
+      "type": "object",
+      "required": ["id", "repositoryId", "subpath", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "repositoryId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "subpath": {
+          "type": "string",
+          "pattern": "^(?:\\.|(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)$"
+        },
+        "kind": { "const": "kubernetes" }
+      }
+    },
     "observation": {
       "type": "object",
       "required": ["id", "kind", "repository", "commit", "detector", "value"],
@@ -71,4 +108,3 @@
     }
   }
 }
-

@@ -74,7 +74,9 @@ def _bounded_content(lines, start, end):
     return content, actual_end, truncated
 
 
-def _bundle_kind(observations):
+def _bundle_kind(observations, source_selection=None):
+    if source_selection is not None:
+        return source_selection["kind"]
     return "application" if any(
         item.get("kind") in {"build-project", "declared-dependency", "build-plugin", "build-module"}
         for item in observations
@@ -211,7 +213,7 @@ def select_evidence(inventory, source):
     bundle = {
         "schemaVersion": 1,
         "repository": inventory["repository"],
-        "kind": _bundle_kind(observations),
+        "kind": _bundle_kind(observations, inventory.get("sourceSelection")),
         "commit": inventory["commit"],
         "inventorySha256": inventory_digest(inventory),
         "selectedEvidence": sorted(selected, key=lambda item: (item["path"], item["lines"])),
@@ -222,6 +224,8 @@ def select_evidence(inventory, source):
             {"path": path, "reason": reason} for path, reason in sorted(excluded_keys)
         ],
     }
+    if "sourceSelection" in inventory:
+        bundle["sourceSelection"] = dict(inventory["sourceSelection"])
     bundle["id"] = artifact_id(bundle)
     bundle_errors = validate_evidence_bundle(bundle)
     if bundle_errors:

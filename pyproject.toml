@@ -3,4 +3,4 @@ name = "mercurio-knowledge-tools"
 version = "0.1.0"
 description = "Deterministic discovery tools for the Mercurio application landscape"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = ["PyYAML==6.0.2"]

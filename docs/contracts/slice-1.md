@@ -107,7 +107,7 @@ Candidates remain outside `catalog/`. Validation does not authorize promotion.
 
 ```text
 ./tools/landscape preflight SOURCE
-./tools/landscape discover SOURCE --repository ID [--output PATH]
+./tools/landscape discover SOURCE --repository ID [--output PATH] [--topology TOPOLOGY --selection ID]
 ./tools/landscape validate INVENTORY [--source SOURCE]
 ./tools/landscape status SOURCE --inventory INVENTORY
 ./tools/landscape sources validate REGISTRY

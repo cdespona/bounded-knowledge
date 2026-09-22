@@ -61,6 +61,27 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
       "not": { "pattern": "[\\r\\n\\u2028\\u2029]" }
     },
+    "safeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "not": { "pattern": "[\\r\\n\\u2028\\u2029]" }
+    },
+    "structuralPointer": {
+      "type": "string",
+      "pattern": "^(?:/(?:[^~/\\r\\n\\u2028\\u2029]|~[01])*)*$",
+      "not": { "pattern": "[\\r\\n\\u2028\\u2029]" }
+    },
+    "literalImage": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?::[0-9]+)?/)?[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(?:@[A-Za-z][A-Za-z0-9_.+-]*:[A-Za-z0-9=_+.-]{32,})?$",
+      "not": {
+        "anyOf": [
+          { "const": "scratch" },
+          { "pattern": "[\\r\\n\\u2028\\u2029]" }
+        ]
+      }
+    },
     "externalImageReference": {
       "type": "object",
       "required": ["role", "form", "image"],
@@ -68,17 +89,7 @@
       "properties": {
         "role": { "const": "base-image" },
         "form": { "const": "dockerfile-from" },
-        "image": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^(?:[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?::[0-9]+)?/)?[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(?:@[A-Za-z][A-Za-z0-9_.+-]*:[A-Za-z0-9=_+.-]{32,})?$",
-          "not": {
-            "anyOf": [
-              { "const": "scratch" },
-              { "pattern": "[\\r\\n\\u2028\\u2029]" }
-            ]
-          }
-        },
+        "image": { "$ref": "#/$defs/literalImage" },
         "stageAlias": { "$ref": "#/$defs/stageAlias" }
       }
     },
@@ -96,7 +107,68 @@
     "imageReference": {
       "oneOf": [
         { "$ref": "#/$defs/externalImageReference" },
-        { "$ref": "#/$defs/scratchReference" }
+        { "$ref": "#/$defs/scratchReference" },
+        { "$ref": "#/$defs/kubernetesImageReference" }
+      ]
+    },
+    "kubernetesImageReference": {
+      "type": "object",
+      "required": [
+        "role",
+        "form",
+        "image",
+        "sourceSelectionId",
+        "apiVersion",
+        "workloadKind",
+        "containerCategory",
+        "documentIndex",
+        "pointer"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "const": "workload-image" },
+        "form": { "const": "kubernetes-yaml" },
+        "image": { "$ref": "#/$defs/literalImage" },
+        "sourceSelectionId": { "$ref": "#/$defs/safeId" },
+        "apiVersion": { "enum": ["v1", "apps/v1", "batch/v1"] },
+        "workloadKind": {
+          "enum": [
+            "Pod",
+            "Deployment",
+            "StatefulSet",
+            "DaemonSet",
+            "ReplicaSet",
+            "Job",
+            "CronJob"
+          ]
+        },
+        "containerCategory": {
+          "enum": ["containers", "initContainers", "ephemeralContainers"]
+        },
+        "documentIndex": { "type": "integer", "minimum": 0 },
+        "pointer": { "$ref": "#/$defs/structuralPointer" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "apiVersion": { "const": "v1" },
+            "workloadKind": { "const": "Pod" }
+          }
+        },
+        {
+          "properties": {
+            "apiVersion": { "const": "apps/v1" },
+            "workloadKind": {
+              "enum": ["Deployment", "StatefulSet", "DaemonSet", "ReplicaSet"]
+            }
+          }
+        },
+        {
+          "properties": {
+            "apiVersion": { "const": "batch/v1" },
+            "workloadKind": { "enum": ["Job", "CronJob"] }
+          }
+        }
       ]
     },
     "stageReference": {
@@ -111,6 +183,12 @@
       }
     },
     "containerGap": {
+      "oneOf": [
+        { "$ref": "#/$defs/dockerfileGap" },
+        { "$ref": "#/$defs/kubernetesGap" }
+      ]
+    },
+    "dockerfileGap": {
       "type": "object",
       "required": ["context", "form", "code", "detail"],
       "additionalProperties": false,
@@ -133,8 +211,87 @@
             "unsupported-stage-source"
           ]
         },
-        "detail": { "type": "string", "minLength": 1 }
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "pattern": "[\\r\\n\\u2028\\u2029]" }
+        }
       }
+    },
+    "kubernetesGap": {
+      "type": "object",
+      "required": [
+        "context",
+        "form",
+        "code",
+        "detail",
+        "sourceSelectionId",
+        "documentIndex",
+        "pointer"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "context": { "const": "kubernetes-workload" },
+        "form": { "const": "kubernetes-yaml" },
+        "code": {
+          "enum": [
+            "malformed-kubernetes-yaml",
+            "duplicate-kubernetes-key",
+            "unsupported-kubernetes-key",
+            "unsupported-kubernetes-tag",
+            "unsupported-kubernetes-anchor",
+            "unsupported-kubernetes-alias",
+            "unsupported-kubernetes-merge",
+            "kubernetes-parser-resource-limit",
+            "invalid-kubernetes-document",
+            "missing-kubernetes-type",
+            "unsupported-kubernetes-version",
+            "unsupported-kubernetes-kind",
+            "invalid-kubernetes-list",
+            "invalid-kubernetes-list-item",
+            "invalid-kubernetes-workload",
+            "invalid-kubernetes-pod-spec",
+            "missing-kubernetes-containers",
+            "invalid-kubernetes-container-array",
+            "invalid-kubernetes-container",
+            "missing-kubernetes-image",
+            "dynamic-kubernetes-image",
+            "invalid-kubernetes-image"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "pattern": "[\\r\\n\\u2028\\u2029]" }
+        },
+        "sourceSelectionId": { "$ref": "#/$defs/safeId" },
+        "documentIndex": { "type": "integer", "minimum": 0 },
+        "pointer": { "$ref": "#/$defs/structuralPointer" }
+      },
+      "oneOf": [
+        { "properties": { "code": { "const": "malformed-kubernetes-yaml" }, "detail": { "const": "The Kubernetes candidate is not valid YAML." } } },
+        { "properties": { "code": { "const": "duplicate-kubernetes-key" }, "detail": { "const": "Duplicate YAML mapping keys are not interpreted." } } },
+        { "properties": { "code": { "const": "unsupported-kubernetes-key" }, "detail": { "const": "Non-scalar YAML mapping keys are outside the version 1 contract." } } },
+        { "properties": { "code": { "const": "unsupported-kubernetes-tag" }, "detail": { "const": "Explicit custom YAML tags are outside the version 1 contract." } } },
+        { "properties": { "code": { "const": "unsupported-kubernetes-anchor" }, "detail": { "const": "YAML anchors are outside the version 1 direct-literal contract." } } },
+        { "properties": { "code": { "const": "unsupported-kubernetes-alias" }, "detail": { "const": "YAML aliases are outside the version 1 direct-literal contract." } } },
+        { "properties": { "code": { "const": "unsupported-kubernetes-merge" }, "detail": { "const": "YAML merge keys are outside the version 1 direct-literal contract." } } },
+        { "properties": { "code": { "const": "kubernetes-parser-resource-limit" }, "detail": { "const": "The Kubernetes YAML candidate exceeds a version 1 parser resource limit." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-document" }, "detail": { "const": "A Kubernetes YAML document must have an object root." } } },
+        { "properties": { "code": { "const": "missing-kubernetes-type" }, "detail": { "const": "A Kubernetes resource requires literal apiVersion and kind strings." } } },
+        { "properties": { "code": { "const": "unsupported-kubernetes-version" }, "detail": { "const": "The workload kind uses an unsupported Kubernetes API version." } } },
+        { "properties": { "code": { "const": "unsupported-kubernetes-kind" }, "detail": { "const": "The Kubernetes resource kind has no version 1 workload image contract." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-list" }, "detail": { "const": "A supported Kubernetes List requires an items array." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-list-item" }, "detail": { "const": "A Kubernetes List item must be an object resource." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-workload" }, "detail": { "const": "The supported Kubernetes workload has a malformed workload structure." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-pod-spec" }, "detail": { "const": "The supported Kubernetes workload has a malformed PodSpec structure." } } },
+        { "properties": { "code": { "const": "missing-kubernetes-containers" }, "detail": { "const": "A supported Kubernetes PodSpec requires a non-empty containers array." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-container-array" }, "detail": { "const": "A Kubernetes container field must be an array." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-container" }, "detail": { "const": "A Kubernetes container entry must be an object." } } },
+        { "properties": { "code": { "const": "missing-kubernetes-image" }, "detail": { "const": "A Kubernetes container entry requires a non-empty image string." } } },
+        { "properties": { "code": { "const": "dynamic-kubernetes-image" }, "detail": { "const": "A Kubernetes image value uses unsupported dynamic or template syntax." } } },
+        { "properties": { "code": { "const": "invalid-kubernetes-image" }, "detail": { "const": "A Kubernetes image value is outside the conservative literal image grammar." } } }
+      ]
     }
   }
 }

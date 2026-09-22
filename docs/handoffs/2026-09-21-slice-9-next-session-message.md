@@ -21,15 +21,23 @@ capabilities register:
 Your first objective is contract research, not automatic implementation: determine
 whether one narrow deployment-image serialization—Kubernetes JSON or a precisely bounded
 Docker Compose serialization—has both a safe candidate-file boundary and complete
-structural coverage. Freeze and implement at most one. If neither is safe and complete,
-record the deferral and recommend the next deterministic roadmap detector instead of
-adding partial YAML/JSON support.
+structural coverage. Research alone does not authorize implementation or final deferral.
+
+After research, stop and present an evidence-backed comparison of Kubernetes JSON,
+Compose, and neither. Then grill the user one question at a time, providing your
+recommended answer and rationale for each question. Answer questions from repository
+evidence yourself when possible; ask only for choices or real-world context the
+repository cannot establish. Obtain an explicit user choice before freezing a contract,
+changing deferred statuses, implementing anything, or selecting the next roadmap
+detector. Silence or lack of objection is not approval.
 
 Follow the contract-first → implementation → independent-review sequence in the handoff.
 Begin with parallel read-only Kubernetes JSON research, Compose boundary research, and
-adversarial completeness/false-positive analysis. Integrate one central decision before
-implementation. After that, parallelize only explicitly non-overlapping files. Run an
-independent read-only review after integration and resolve every finding.
+adversarial completeness/false-positive analysis. Integrate the comparison centrally,
+run the mandatory grill, and stop for explicit approval. Only after approval may you
+record the decision and, if authorized, parallelize explicitly non-overlapping
+implementation files. Run an independent read-only review after integration and resolve
+every finding.
 
 Important boundaries:
 
@@ -51,5 +59,5 @@ Run portable schema parity checks if a persisted contract is added, the complete
 deterministic suite, and Git diff/status checks. Maintain
 `docs/initiative/deferred-capabilities.md`. At completion report the exact starting SHA,
 scope decision, changed files, validation, known gaps, register changes, independent
-review findings, exact dirty state, and pending commit/push authorization.
-
+review findings, the grill questions and explicit user decision, exact dirty state, and
+pending commit/push authorization.

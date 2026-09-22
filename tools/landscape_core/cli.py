@@ -47,6 +47,8 @@ def build_parser():
     discover_parser = subparsers.add_parser("discover", help="produce a stable inventory")
     discover_parser.add_argument("source")
     discover_parser.add_argument("--repository", required=True, type=_repository_id)
+    discover_parser.add_argument("--topology")
+    discover_parser.add_argument("--selection", type=_repository_id)
     discover_parser.add_argument("--output")
 
     validate_parser = subparsers.add_parser("validate", help="validate an inventory")
@@ -138,8 +140,14 @@ def main(argv=None):
             return 0 if result["clean"] else 2
 
         if args.command == "discover":
+            topology = None
+            if args.topology is not None:
+                topology = json.loads(Path(args.topology).read_text(encoding="utf-8"))
             _write_json(
-                discover(Path(args.source), args.repository),
+                discover(
+                    Path(args.source), args.repository,
+                    topology=topology, selection=args.selection,
+                ),
                 output=args.output,
             )
             return 0

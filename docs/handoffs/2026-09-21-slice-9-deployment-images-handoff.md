@@ -10,10 +10,12 @@ without YAML guesswork, source execution, network access, or misleading partial 
 
 ```mermaid
 flowchart LR
-    Research["Parallel read-only contract research"] --> Decision{"Complete safe boundary?"}
-    Decision -->|Kubernetes JSON proven| K8s["Freeze one JSON workload contract"]
-    Decision -->|Compose proven| Compose["Freeze one serialization contract"]
-    Decision -->|Neither proven| Defer["Record deferral and select next safe detector"]
+    Research["Parallel read-only contract research"] --> Brief["Evidence-backed decision brief"]
+    Brief --> Grill["Grill user one question at a time"]
+    Grill --> Approval{"Explicit user decision"}
+    Approval -->|Kubernetes JSON| K8s["Freeze one JSON workload contract"]
+    Approval -->|Compose| Compose["Freeze one serialization contract"]
+    Approval -->|Neither| Defer["Record approved deferral and select next safe detector"]
     K8s --> Implement["Implement and validate"]
     Compose --> Implement
     Implement --> Review["Independent read-only review"]
@@ -152,8 +154,13 @@ Research these alternatives independently before selecting one:
 
 ## Decision rule
 
-Freeze and implement at most one deployment serialization in Slice 9. Proceed only when
-research proves all of the following:
+Research may establish facts and recommend a direction, but it does not authorize either
+implementation or final deferral. Freeze and implement at most one deployment
+serialization in Slice 9, and proceed only after both conditions hold:
+
+1. research proves all of the following gates; and
+2. the user explicitly chooses Kubernetes JSON, Compose, or neither after the required
+   grill.
 
 | Gate | Required evidence |
 | --- | --- |
@@ -164,23 +171,61 @@ research proves all of the following:
 | Unsupported behavior | Stable fixed-code gaps without leaking source values |
 | Semantic restraint | Static declaration/reference wording only |
 
-If no candidate passes all gates, update the deferred-capabilities register with the
-research result and stop deployment implementation. Recommend the next safe roadmap
-detector—normally a separately contracted Terraform literal inventory—rather than
-widening Slice 9 silently.
+If no candidate passes all gates, recommend deferral, but do not finalize that deferral or
+select the next detector without explicit user approval. After approval, update the
+deferred-capabilities register and recommend the next safe roadmap detector—normally a
+separately contracted Terraform literal inventory—rather than widening Slice 9 silently.
+
+## Research brief and mandatory grill
+
+After read-only research, stop and present one concise comparison before changing any
+schema, detector, test fixture, contract, or deferred status:
+
+| Option | Candidate boundary | Structural coverage | Parser/evidence boundary | Gaps and risks | Recommendation |
+| --- | --- | --- | --- | --- | --- |
+| Kubernetes JSON | Proven or unproven | Exact workload and PodSpec forms | Exact parser and source-line policy | Missing or ambiguous forms | Implement or defer |
+| Docker Compose | Proven or unproven | Exact service/image/build forms | Exact serialization and candidate policy | YAML, includes, profiles, extensions | Implement or defer |
+| Neither | Not applicable | Not applicable | Not applicable | Why both fail the gates | Move to the next safe detector |
+
+Then interview the user one question at a time. For every question:
+
+- provide the recommended answer and its rationale;
+- answer it from repository evidence instead of asking when research can establish the
+  fact;
+- ask only about a choice, priority, real-world convention, dependency appetite, or
+  source context that the repository cannot establish safely;
+- resolve dependent branches before moving to the next question.
+
+Expected decision topics include whether the real landscape contains useful Kubernetes
+JSON or Compose inputs, whether an authoritative candidate filename/location convention
+exists, whether a third-party YAML dependency is acceptable, whether incomplete workload
+coverage is acceptable, and whether Terraform should be next if neither deployment
+format passes.
+
+The agents must obtain an explicit user statement choosing one of these outcomes:
+
+1. approve a specific bounded Kubernetes JSON contract direction;
+2. approve a specific bounded Compose contract direction; or
+3. approve deferral of both and the next roadmap direction.
+
+Silence, lack of objection, an agent recommendation, or a research result is not
+approval. Stop after the grill if the user has not made an explicit choice.
 
 ## Execution sequence
 
 1. In parallel, run isolated read-only research for Kubernetes JSON, Compose
    serialization/candidates, and adversarial completeness/false-positive analysis.
-2. Integrate one written decision centrally before changing schemas or implementation.
-3. If a boundary is approved, freeze one contract and then parallelize only explicitly
+2. Integrate the evidence-backed comparison centrally without changing implementation or
+   deferred statuses.
+3. Run the mandatory one-question-at-a-time grill and stop for explicit user approval.
+4. Record the approved decision centrally.
+5. If a boundary is approved, freeze one contract and then parallelize only explicitly
    non-overlapping schema/fixture and focused-test files.
-4. Serialize detector implementation, shared validator/evidence changes, registration,
+6. Serialize detector implementation, shared validator/evidence changes, registration,
    and documentation updates.
-5. Run portable schema parity, focused tests, the complete deterministic suite, and Git
+7. Run portable schema parity, focused tests, the complete deterministic suite, and Git
    diff/status checks.
-6. Run an independent read-only review after integration. Resolve every correctness and
+8. Run an independent read-only review after integration. Resolve every correctness and
    safety finding and repeat review until clean.
 
 ## Safety and semantic boundaries
@@ -238,7 +283,7 @@ than `git add .`.
 
 ## Completion report
 
-Report the exact starting SHA, scope decision, changed files, validation, known gaps,
-deferred-register changes, every independent-review finding and resolution, exact dirty
-state, and whether commit/push authorization remains pending.
-
+Report the exact starting SHA, research brief, grill questions and explicit user decision,
+changed files, validation, known gaps, deferred-register changes, every
+independent-review finding and resolution, exact dirty state, and whether commit/push
+authorization remains pending.

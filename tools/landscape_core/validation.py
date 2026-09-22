@@ -13,6 +13,7 @@ from .contracts import (
     validate_container_observation,
     validate_kafka_observation,
     validate_manifest_observation,
+    validate_source_selection,
 )
 from .observations import observation
 from .safety import exclusion_reason
@@ -28,7 +29,9 @@ TOP_LEVEL_FIELDS = {
     "detectors",
     "observations",
     "excluded",
+    "sourceSelection",
 }
+REQUIRED_TOP_LEVEL_FIELDS = TOP_LEVEL_FIELDS - {"sourceSelection"}
 OBSERVATION_FIELDS = {
     "id",
     "kind",
@@ -48,9 +51,9 @@ def _safe_relative_path(value):
 def validate_inventory(document, source=None):
     errors = []
     missing = (
-        sorted(TOP_LEVEL_FIELDS - set(document))
+        sorted(REQUIRED_TOP_LEVEL_FIELDS - set(document))
         if isinstance(document, dict)
-        else sorted(TOP_LEVEL_FIELDS)
+        else sorted(REQUIRED_TOP_LEVEL_FIELDS)
     )
     if missing:
         return ["Missing top-level fields: {}".format(", ".join(missing))]
@@ -79,6 +82,17 @@ def validate_inventory(document, source=None):
                 or detector.get("version", 0) < 1
             ):
                 errors.append("detectors[{}] is invalid".format(index))
+    source_selection = document.get("sourceSelection")
+    if source_selection is not None:
+        errors.extend(validate_source_selection(
+            source_selection, "sourceSelection", document.get("repository")
+        ))
+        detector_names = {
+            item.get("name") for item in document.get("detectors", [])
+            if isinstance(item, dict)
+        }
+        if "kubernetes-images" not in detector_names:
+            errors.append("sourceSelection requires the kubernetes-images detector")
     if not isinstance(document["observations"], list):
         errors.append("observations must be an array")
         return errors
@@ -149,6 +163,37 @@ def validate_inventory(document, source=None):
             errors.extend(validate_kafka_observation(item, prefix))
         if item.get("kind") in CONTAINER_KINDS:
             errors.extend(validate_container_observation(item, prefix))
+            if (
+                isinstance(item.get("value"), dict)
+                and item["value"].get("form") == "kubernetes-yaml"
+                and not isinstance(source_selection, dict)
+            ):
+                errors.append(
+                    "{} requires an inventory sourceSelection".format(prefix)
+                )
+            if (
+                isinstance(source_selection, dict)
+                and isinstance(item.get("value"), dict)
+                and item["value"].get("form") == "kubernetes-yaml"
+                and item["value"].get("sourceSelectionId") != source_selection.get("id")
+            ):
+                errors.append(
+                    "{}.value.sourceSelectionId does not match the inventory".format(prefix)
+                )
+            if (
+                isinstance(source_selection, dict)
+                and isinstance(item.get("value"), dict)
+                and item["value"].get("form") == "kubernetes-yaml"
+                and isinstance(source_ref, dict)
+            ):
+                source_path = PurePosixPath(source_ref.get("path", ""))
+                selection_path = PurePosixPath(source_selection.get("subpath", ""))
+                if (
+                    source_path == selection_path
+                    or source_path.parts[:len(selection_path.parts)]
+                    != selection_path.parts
+                ):
+                    errors.append("{}.source.path is outside sourceSelection".format(prefix))
 
     if not isinstance(document["excluded"], list):
         errors.append("excluded must be an array")
@@ -162,6 +207,17 @@ def validate_inventory(document, source=None):
                 or not item.get("reason")
             ):
                 errors.append("excluded[{}] is invalid".format(index))
+            elif isinstance(source_selection, dict):
+                excluded_path = PurePosixPath(item["path"])
+                selection_path = PurePosixPath(source_selection.get("subpath", ""))
+                if (
+                    excluded_path == selection_path
+                    or excluded_path.parts[:len(selection_path.parts)]
+                    != selection_path.parts
+                ):
+                    errors.append(
+                        "excluded[{}].path is outside sourceSelection".format(index)
+                    )
 
     if source is not None:
         try:

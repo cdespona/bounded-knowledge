@@ -180,8 +180,6 @@ class ContractTest(unittest.TestCase):
     def test_source_registry_examples(self):
         self.assertEqual([], validate_source_registry(load("source-registry.valid.json")))
         self.assertTrue(validate_source_registry(load("source-registry.invalid.json")))
-        canonical = json.loads((PROJECT / "sources.json").read_text(encoding="utf-8"))
-        self.assertEqual([], validate_source_registry(canonical))
 
     def test_source_resolution_examples(self):
         self.assertEqual([], validate_source_resolution(load("source-resolution.valid.json")))

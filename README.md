@@ -34,13 +34,15 @@ slice delivers or newly defers a capability.
 
 ## Deterministic commands
 
-The tooling requires Python 3.9 or later and Git. It has no third-party runtime
-dependencies.
+The tooling requires Python 3.9 or later and Git. Selection-scoped Kubernetes YAML
+inventory additionally uses the pinned `PyYAML==6.0.2` dependency; the remaining
+detectors use the Python standard library.
 
 ```text
 ./tools/landscape preflight /path/to/repository
 ./tools/landscape discover /path/to/repository --repository application-id
 ./tools/landscape discover /path/to/repository --repository application-id --output work/application-id.json
+./tools/landscape discover /path/to/k8s-manifests --repository k8s-manifests --topology source-topology.json --selection application-kubernetes
 ./tools/landscape validate work/application-id.json --source /path/to/repository
 ./tools/landscape status /path/to/repository --inventory work/application-id.json
 ./tools/landscape sources validate sources.json
@@ -98,6 +100,16 @@ variables, templates, continuations, heredocs, escape directives, malformed form
 ambiguous stages remain visible gaps; deployment serializations and `COPY --from` are
 deferred. The exact static-only boundary is documented in
 `docs/contracts/slice-8-container-image-inventory.md`.
+
+Selection-scoped discovery also inventories literal images from plain Kubernetes YAML.
+It requires one exact reviewed Kubernetes `sourceSelections` entry and inspects only
+stable Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, and CronJob PodSpec
+paths, including their List forms and all three container categories. Unsupported or
+unsafe YAML constructs and structural failures become fixed non-leaking gaps; known
+non-image resources remain silent. Helm, Kustomize, templates, Kubernetes JSON, custom
+workload CRDs, runtime deployment, and ownership inference remain outside the contract.
+The exact boundary is documented in
+`docs/contracts/slice-9-kubernetes-image-inventory.md`.
 
 Captured model responses are deterministically reduced to exactly one JSON object, then
 validated against the exact selected evidence bundle before they can reach a later human

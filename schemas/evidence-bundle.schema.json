@@ -15,6 +15,19 @@
     "excluded"
   ],
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "required": ["kind"],
+        "properties": { "kind": { "const": "kubernetes" } }
+      },
+      "then": { "required": ["sourceSelection"] }
+    },
+    {
+      "if": { "required": ["sourceSelection"] },
+      "then": { "properties": { "kind": { "const": "kubernetes" } } }
+    }
+  ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
@@ -22,6 +35,7 @@
     "kind": { "enum": ["application", "kubernetes", "terraform", "pipeline", "other"] },
     "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
     "inventorySha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "sourceSelection": { "$ref": "#/$defs/sourceSelection" },
     "selectedEvidence": {
       "type": "array",
       "items": { "$ref": "#/$defs/selectedEvidence" }
@@ -36,6 +50,20 @@
     }
   },
   "$defs": {
+    "sourceSelection": {
+      "type": "object",
+      "required": ["id", "repositoryId", "subpath", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "repositoryId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "subpath": {
+          "type": "string",
+          "pattern": "^(?:\\.|(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)$"
+        },
+        "kind": { "const": "kubernetes" }
+      }
+    },
     "source": {
       "type": "object",
       "required": ["path", "lines"],

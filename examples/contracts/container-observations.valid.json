@@ -38,5 +38,75 @@
       "detail": "Dockerfile FROM options are outside the detector version 1 allowlist.",
       "form": "dockerfile-from"
     }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": {
+      "lines": "18",
+      "path": "k8s-capside/pro/mango/customer/customer-api/deployment.yaml"
+    },
+    "value": {
+      "apiVersion": "apps/v1",
+      "containerCategory": "containers",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test:5000/customer/api:2026.09",
+      "pointer": "/spec/template/spec/containers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "customer-api-production",
+      "workloadKind": "Deployment"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": {
+      "lines": "27",
+      "path": "k8s-capside/pro/mango/customer/customer-maintenance/jobs.yml"
+    },
+    "value": {
+      "apiVersion": "batch/v1",
+      "containerCategory": "initContainers",
+      "documentIndex": 1,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/customer/prepare@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "pointer": "/spec/jobTemplate/spec/template/spec/initContainers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "customer-maintenance-production",
+      "workloadKind": "CronJob"
+    }
+  },
+  {
+    "kind": "container-image-reference",
+    "source": {
+      "lines": "9",
+      "path": "k8s-capside/pro/mango/operations/debug/pod.yaml"
+    },
+    "value": {
+      "apiVersion": "v1",
+      "containerCategory": "ephemeralContainers",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "image": "registry.example.test/operations/debug:1.2.3",
+      "pointer": "/spec/ephemeralContainers/0/image",
+      "role": "workload-image",
+      "sourceSelectionId": "operations-debug-production",
+      "workloadKind": "Pod"
+    }
+  },
+  {
+    "kind": "container-gap",
+    "source": {
+      "lines": "1",
+      "path": "k8s-capside/pro/mango/customer/customer-api/unsupported.yaml"
+    },
+    "value": {
+      "code": "unsupported-kubernetes-kind",
+      "context": "kubernetes-workload",
+      "detail": "The Kubernetes resource kind has no version 1 workload image contract.",
+      "documentIndex": 0,
+      "form": "kubernetes-yaml",
+      "pointer": "",
+      "sourceSelectionId": "customer-api-production"
+    }
   }
 ]

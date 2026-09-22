@@ -177,13 +177,29 @@ Governing contract:
 | `S8-P04` | Later-stage `FROM` references (split from the original combined `COPY --from` planning item) | `delivered-in-slice` | Earlier exact aliases in later `FROM` are delivered; `COPY --from` remains deferred as `S8-D01` |
 | `S8-P05` | Docker Compose image/build references | `deferred` | Requires an exact serialization and conventional candidate boundary |
 | `S8-P06` | Kubernetes JSON workload image references | `deferred` | Requires a complete conventional candidate and workload-shape boundary |
-| `S8-P07` | Kubernetes YAML parsing and multi-document manifests | `deferred` | Requires a safe YAML parser/dependency decision; do not hand-write a partial parser |
+| `S8-P07` | Kubernetes YAML parsing and multi-document manifests | `delivered-later` | Delivered by Slice 9 through pinned safe PyYAML node/event parsing and fixed resource limits |
 | `S8-P08` | Helm templates/values and Kustomize bases, overlays, and image transforms | `deferred` | Requires template/reference semantics without execution or remote resolution |
-| `S8-P09` | Init, ephemeral, sidecar, Job, and CronJob container locations | `deferred` | Define a complete workload vocabulary and independent gap behavior with deployment parsing |
+| `S8-P09` | Init, ephemeral, sidecar, Job, and CronJob container locations | `delivered-later` | Slice 9 covers init, ephemeral, and ordinary containers across its complete stable workload matrix, including Job and CronJob |
 | `S8-P10` | Registry resolution, pullability, provenance, SBOM, signing, and vulnerability data | `deferred` | Separate future network/runtime/security evidence capability |
 | `S8-D01` | Dockerfile `COPY --from` stage and external-image references | `deferred` | Requires an exact COPY grammar and stage/image ambiguity contract |
 | `S8-D02` | Arbitrary Dockerfile names and full Dockerfile grammar, parser directives, options, continuations, heredocs, and argument resolution | `deferred` | Add only through explicit grammar revisions without executing Docker or BuildKit |
 | `S8-B01` | Claiming an image is built, available, secure, deployed, running, healthy, or owned by an application from static literals | `permanent-boundary` | Requires independent runtime, security, or reviewed topology evidence |
+
+## Slice 9: Kubernetes YAML workload images
+
+Governing contract:
+[`docs/contracts/slice-9-kubernetes-image-inventory.md`](../contracts/slice-9-kubernetes-image-inventory.md)
+
+| ID | Candidate capability | Status | Contract question or boundary |
+| --- | --- | --- | --- |
+| `S9-P01` | Literal images in plain Kubernetes YAML selected through reviewed source topology | `delivered-in-slice` | Delivered with one explicit source selection and bounded safe node-level YAML parsing |
+| `S9-P02` | Stable Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, and CronJob workload paths | `delivered-in-slice` | Delivered as one complete workload matrix, including corresponding List forms |
+| `S9-P03` | `containers`, `initContainers`, and `ephemeralContainers` image locations | `delivered-in-slice` | Delivered through independent structural inspection in every supported PodSpec |
+| `S9-D01` | Kubernetes JSON workload images | `deferred` | The approved real-landscape serialization is YAML; no conventional JSON candidate boundary was established |
+| `S9-D02` | Beta workload API versions, ReplicationController, PodTemplate, and custom workload CRDs | `deferred` | Add only through explicit versioned structural contracts; never guess PodSpec paths |
+| `S9-D03` | KEDA `ScaledJob` workload images | `deferred` | The current landscape uses `ScaledObject`; `ScaledJob` requires an exact KEDA API and `jobTargetRef` contract |
+| `S9-D04` | Helm, Kustomize, overlays, patches, templates, includes, and variable substitution | `deferred` | Requires separate provenance and non-executing resolution contracts |
+| `S9-B01` | Inferring application ownership or runtime deployment from a Kubernetes selection or image literal | `permanent-boundary` | Bindings remain reviewed topology evidence; static declarations do not establish runtime state |
 
 ## Maintenance rule
 
