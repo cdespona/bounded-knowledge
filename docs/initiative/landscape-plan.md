@@ -447,6 +447,7 @@ questions.
 | Slice 7: Kafka literal inventory | Implemented and validated | Bounded Java, Kotlin, and properties references with explicit gaps and static-only roles |
 | Slice 8: container-image literal inventory | Implemented and validated | Bounded Dockerfile `FROM` image, scratch, and earlier-stage references with explicit gaps |
 | Slice 9: Kubernetes YAML workload-image inventory | Implemented and validated | One reviewed Kubernetes source selection, stable workload/List matrix, literal images, and bounded non-leaking YAML gaps |
+| Slice 10: Terraform and Terragrunt declared-composition inventory | Delivered | One reviewed Terraform application subtree, native `.tf`, bounded local `terragrunt.hcl`, declared modules and local declarations, fail-closed whole-line evidence, and unresolved composition gaps |
 | Private pilot | Not started | Pilot applications are not yet selected |
 | Canonical promotion | Not started | Requires reviewed target model and pilot |
 | Local website | Not started | Information architecture defined in this plan |
@@ -574,6 +575,7 @@ Pilot acceptance criteria:
 | 2026-09-18 | Narrow Kafka literal inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Exact Kafka contexts gate topic and schema-subject references; unsupported forms remain visible gaps |
 | 2026-09-21 | Narrow Dockerfile container-image inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Literal external images, scratch, and earlier build stages are distinct; six review findings were closed and 93 tests passed |
 | 2026-09-22 | Selection-scoped Kubernetes YAML workload-image inventory implemented after contract research and an explicit user decision | Plain YAML, one reviewed topology selection, stable workload/List forms, three container categories, and safe bounded parsing are supported; five independent-review findings were closed and 107 tests passed; Compose and Kubernetes JSON remain deferred |
+| 2026-09-25 | Terraform and Terragrunt declared-composition inventory implemented after an explicit evidence-safety decision | Positioned HCL parsing inventories native Terraform and local Terragrunt composition in one reviewed selection; only parser-proven whole-line declaration/source ranges enter selected evidence, while all uncertain ranges remain inventory-only with fixed withholding metadata |
 
 ## Risks and mitigations
 
@@ -613,8 +615,12 @@ These questions do not block documenting the plan, but they affect later impleme
 
 ## Immediate next decision
 
-Choose the next detector only through a new explicit user decision after reviewing the
-Slice 9 boundary and remaining deferred-capability register. No roadmap detector is
-selected automatically. Compose, Kubernetes JSON, Helm, Kustomize, broader Dockerfile
-and Kafka forms, Terraform, Conductor, the private pilot, and promotion remain deferred
+Slice 10 is the explicitly selected Terraform and Terragrunt declared-composition
+direction. Its contract is frozen in
+`docs/contracts/slice-10-terraform-terragrunt-inventory.md`; `python-hcl2==8.1.4` is the
+approved direct parser dependency, with constrained Python-3.9-compatible transitive
+versions and mandatory parser-gate fixtures. Implementation, dependency installation,
+private-repository access, commit, and push remain unauthorized.
+OpenAPI and AsyncAPI YAML parity, Compose, Kubernetes JSON, Helm, Kustomize, broader
+Dockerfile and Kafka forms, Conductor, the private pilot, and promotion remain deferred
 until their own contract research and authorization.

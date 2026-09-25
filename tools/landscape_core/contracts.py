@@ -26,6 +26,25 @@ KAFKA_KINDS = {"kafka-topic-reference", "kafka-schema-reference", "kafka-gap"}
 CONTAINER_KINDS = {
     "container-image-reference", "container-stage-reference", "container-gap"
 }
+TERRAFORM_KINDS = {"terraform-declaration", "terraform-reference", "terraform-composition", "terraform-gap"}
+TERRAFORM_GAP_DETAILS = {
+    "malformed-hcl": "The Terraform candidate is not valid HCL.",
+    "terraform-parser-resource-limit": "The Terraform candidate exceeds a version 1 parser resource limit.",
+    "unsupported-terraform-json": "Terraform JSON configuration is outside the version 1 contract.",
+    "unsupported-terraform-block": "The Terraform block is outside the version 1 declaration contract.",
+    "unsupported-terragrunt-construct": "The Terragrunt construct is outside the version 1 contract.",
+    "dynamic-module-source": "The module source is absent, non-literal, or expression-derived.",
+    "dynamic-terragrunt-source": "The Terragrunt Terraform source is absent, non-literal, or expression-derived.",
+    "unresolved-module-implementation": "Declared module implementation is intentionally not inspected.",
+    "unresolved-terragrunt-include": "Included Terragrunt configuration is intentionally not followed.",
+    "unresolved-terragrunt-dependency": "Terragrunt dependency configuration and outputs are intentionally not followed.",
+    "unresolved-terragrunt-input": "Terragrunt input values are intentionally omitted.",
+    "dynamic-instance-shape": "count or for_each prevents a literal instance shape.",
+    "dynamic-block-content": "A dynamic block can generate structure not represented by local declarations.",
+    "unsupported-reference-expression": "The expression cannot be represented as a supported direct traversal.",
+    "sensitive-value-withheld": "Source text is withheld by the evidence privacy policy.",
+}
+TERRAFORM_GAP_CODES = set(TERRAFORM_GAP_DETAILS)
 API_SPECIFICATIONS = {"openapi", "asyncapi"}
 API_SERIALIZATIONS = {"json", "yaml"}
 HTTP_ACTIONS = {
@@ -210,8 +229,8 @@ def validate_source_selection(value, prefix="sourceSelection", repository=None):
     subpath = value["subpath"]
     if not _is_safe_topology_path(subpath):
         errors.append("{}.subpath must be a safe relative path".format(prefix))
-    if value["kind"] != "kubernetes":
-        errors.append("{}.kind must be kubernetes".format(prefix))
+    if value["kind"] not in {"kubernetes", "terraform"}:
+        errors.append("{}.kind must be kubernetes or terraform".format(prefix))
     if repository is not None and value["repositoryId"] != repository:
         errors.append("{}.repositoryId does not match the artifact".format(prefix))
     return errors
@@ -575,6 +594,42 @@ def validate_container_observation(item, prefix="observation"):
     return errors
 
 
+def validate_terraform_observation(item, prefix="observation"):
+    """Validate the bounded declared-composition Terraform vocabulary."""
+    if not isinstance(item, dict) or item.get("kind") not in TERRAFORM_KINDS:
+        return ["{}.kind is not a Terraform observation kind".format(prefix)]
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    if not isinstance(value, dict):
+        return errors + ["{}.value must be an object".format(prefix)]
+    selection = value.get("sourceSelectionId")
+    if not isinstance(selection, str) or REPOSITORY_ID.fullmatch(selection) is None:
+        errors.append("{}.value.sourceSelectionId is invalid".format(prefix))
+    if item["kind"] != "terraform-gap" and value.get("evidenceDisposition") not in {"raw-text-safe", "inventory-only"}:
+        errors.append("{}.value.evidenceDisposition is invalid".format(prefix))
+    if item["kind"] == "terraform-declaration":
+        required = {"declarationType", "language", "loadRole", "sourceSelectionId", "evidenceDisposition"}
+        optional = {"type", "name", "key"}
+        if not _exact_fields(value, required, optional): errors.append("{}.value has invalid declaration fields".format(prefix))
+        if value.get("declarationType") not in {"terraform","resource","data","module","provider","variable","output","local"}: errors.append("{}.value.declarationType is invalid".format(prefix))
+        if value.get("declarationType") == "local" and value.get("evidenceDisposition") != "inventory-only": errors.append("{}.value local declarations are inventory-only".format(prefix))
+        if value.get("language") != "terraform-hcl" or value.get("loadRole") not in {"ordinary","override"}: errors.append("{}.value language or loadRole is invalid".format(prefix))
+    elif item["kind"] == "terraform-reference":
+        if not _exact_fields(value, {"reference", "language", "sourceSelectionId", "evidenceDisposition"}) or value.get("language") != "terraform-hcl" or value.get("evidenceDisposition") != "inventory-only" or not _is_non_empty_string(value.get("reference")):
+            errors.append("{}.value has invalid reference fields".format(prefix))
+    elif item["kind"] == "terraform-composition":
+        required = {"form", "language", "sourceSelectionId", "evidenceDisposition"}
+        if not _exact_fields(value, required, {"module", "source", "label", "key"}): errors.append("{}.value has invalid composition fields".format(prefix))
+        if value.get("form") not in {"terraform-module-source","terragrunt-terraform-source","terragrunt-include","terragrunt-dependency","terragrunt-input-key"}: errors.append("{}.value.form is invalid".format(prefix))
+        if value.get("form") in {"terragrunt-include", "terragrunt-dependency", "terragrunt-input-key"} and value.get("evidenceDisposition") != "inventory-only": errors.append("{}.value form is inventory-only".format(prefix))
+        if value.get("language") not in {"terraform-hcl","terragrunt-hcl"}: errors.append("{}.value.language is invalid".format(prefix))
+    else:
+        if not _exact_fields(value, {"context", "form", "code", "detail", "sourceSelectionId"}): errors.append("{}.value has invalid gap fields".format(prefix))
+        code = value.get("code")
+        if code not in TERRAFORM_GAP_CODES or value.get("detail") != TERRAFORM_GAP_DETAILS.get(code): errors.append("{}.value.detail must match a fixed Terraform gap code".format(prefix))
+    return errors
+
+
 def validate_source_registry(document):
     errors = []
     if not _exact_fields(document, {"schemaVersion", "repositories"}):
@@ -709,10 +764,12 @@ def validate_evidence_bundle(document):
         errors.extend(validate_source_selection(
             source_selection, "sourceSelection", document.get("repository")
         ))
-        if document.get("kind") != "kubernetes":
-            errors.append("sourceSelection requires kind kubernetes")
+        if document.get("kind") not in {"kubernetes", "terraform"}:
+            errors.append("sourceSelection requires a selection-scoped kind")
     if document.get("kind") == "kubernetes" and not isinstance(source_selection, dict):
         errors.append("kind kubernetes requires sourceSelection")
+    if document.get("kind") == "terraform" and not isinstance(source_selection, dict):
+        errors.append("kind terraform requires sourceSelection")
 
     evidence = document["selectedEvidence"]
     if not isinstance(evidence, list):

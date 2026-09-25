@@ -15,7 +15,7 @@ MAX_RANGES_PER_FILE = 16
 MAX_LINES_PER_SELECTION = 200
 MAX_CONTENT_BYTES = 16 * 1024
 MAX_TOTAL_CONTENT_BYTES = 256 * 1024
-GAP_KINDS = {"api-gap", "container-gap", "kafka-gap", "manifest-gap"}
+GAP_KINDS = {"api-gap", "container-gap", "kafka-gap", "manifest-gap", "terraform-gap"}
 
 
 def inventory_digest(document):
@@ -121,6 +121,9 @@ def select_evidence(inventory, source):
                 "observationId": item["id"],
                 "source": dict(source_ref),
             })
+            continue
+        if item.get("kind", "").startswith("terraform-") and item.get("value", {}).get("evidenceDisposition") != "raw-text-safe":
+            gaps.append({"code":"sensitive-value-withheld","detail":"Source text is withheld by the evidence privacy policy.","observationId":item["id"],"source":dict(source_ref)})
             continue
         source_lines = source_ref.get("lines")
         if source_lines is None and relative in precise_paths:

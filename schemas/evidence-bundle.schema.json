@@ -19,13 +19,13 @@
     {
       "if": {
         "required": ["kind"],
-        "properties": { "kind": { "const": "kubernetes" } }
+        "properties": { "kind": { "enum": ["kubernetes", "terraform"] } }
       },
       "then": { "required": ["sourceSelection"] }
     },
     {
       "if": { "required": ["sourceSelection"] },
-      "then": { "properties": { "kind": { "const": "kubernetes" } } }
+      "then": { "properties": { "kind": { "enum": ["kubernetes", "terraform"] } } }
     }
   ],
   "properties": {
@@ -61,7 +61,7 @@
           "type": "string",
           "pattern": "^(?:\\.|(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)$"
         },
-        "kind": { "const": "kubernetes" }
+        "kind": { "enum": ["kubernetes", "terraform"] }
       }
     },
     "source": {

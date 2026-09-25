@@ -42,8 +42,8 @@ def _resolve_selection(root, repository, topology, selection):
         raise ValueError("Discovery repository is not present in the topology")
     if selected["repositoryId"] != repository:
         raise ValueError("Source selection belongs to another repository")
-    if selected["kind"] != "kubernetes" or topology_repository["kind"] != "kubernetes":
-        raise ValueError("Source selection and repository must both have kubernetes kind")
+    if selected["kind"] not in {"kubernetes", "terraform"} or topology_repository["kind"] != selected["kind"]:
+        raise ValueError("Source selection and repository must have the same supported kind")
     current = root
     for part in Path(selected["subpath"]).parts:
         current = current / part

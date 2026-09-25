@@ -26,6 +26,21 @@
       },
       "then": { "required": ["sourceSelection"] }
     }
+    ,
+    {
+      "if": {
+        "properties": {
+          "observations": {
+            "contains": {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "pattern": "^terraform-" } }
+            }
+          }
+        }
+      },
+      "then": { "required": ["sourceSelection"] }
+    }
   ],
   "properties": {
     "schemaVersion": { "const": 1 },
@@ -73,7 +88,7 @@
           "type": "string",
           "pattern": "^(?:\\.|(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)$"
         },
-        "kind": { "const": "kubernetes" }
+        "kind": { "enum": ["kubernetes", "terraform"] }
       }
     },
     "observation": {
