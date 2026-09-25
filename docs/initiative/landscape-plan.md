@@ -447,7 +447,7 @@ questions.
 | Slice 7: Kafka literal inventory | Implemented and validated | Bounded Java, Kotlin, and properties references with explicit gaps and static-only roles |
 | Slice 8: container-image literal inventory | Implemented and validated | Bounded Dockerfile `FROM` image, scratch, and earlier-stage references with explicit gaps |
 | Slice 9: Kubernetes YAML workload-image inventory | Implemented and validated | One reviewed Kubernetes source selection, stable workload/List matrix, literal images, and bounded non-leaking YAML gaps |
-| Slice 10: Terraform and Terragrunt declared-composition inventory | Delivered | One reviewed Terraform application subtree, native `.tf`, bounded local `terragrunt.hcl`, declared modules and local declarations, fail-closed whole-line evidence, and unresolved composition gaps |
+| Slice 10: Terraform and Terragrunt declared-composition inventory | Contract selected; implementation not authorized | One reviewed Terraform application subtree, native `.tf`, bounded local `terragrunt.hcl`, declared modules and local declarations, privacy-preserving evidence, and unresolved composition gaps |
 | Private pilot | Not started | Pilot applications are not yet selected |
 | Canonical promotion | Not started | Requires reviewed target model and pilot |
 | Local website | Not started | Information architecture defined in this plan |
@@ -575,7 +575,7 @@ Pilot acceptance criteria:
 | 2026-09-18 | Narrow Kafka literal inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Exact Kafka contexts gate topic and schema-subject references; unsupported forms remain visible gaps |
 | 2026-09-21 | Narrow Dockerfile container-image inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Literal external images, scratch, and earlier build stages are distinct; six review findings were closed and 93 tests passed |
 | 2026-09-22 | Selection-scoped Kubernetes YAML workload-image inventory implemented after contract research and an explicit user decision | Plain YAML, one reviewed topology selection, stable workload/List forms, three container categories, and safe bounded parsing are supported; five independent-review findings were closed and 107 tests passed; Compose and Kubernetes JSON remain deferred |
-| 2026-09-25 | Terraform and Terragrunt declared-composition inventory implemented after an explicit evidence-safety decision | Positioned HCL parsing inventories native Terraform and local Terragrunt composition in one reviewed selection; only parser-proven whole-line declaration/source ranges enter selected evidence, while all uncertain ranges remain inventory-only with fixed withholding metadata |
+| 2026-09-25 | Terraform and Terragrunt declared-composition direction selected and contract frozen after a one-question-at-a-time review | Version 1 targets one reviewed application subtree, native `.tf` and local `terragrunt.hcl`; `python-hcl2==8.1.4` is the approved direct parser dependency, subject to fixture gates; module implementations, inherited values, effective resources, state, plans, variable-value files, execution, and resolution remain excluded; implementation remains separately gated |
 
 ## Risks and mitigations
 

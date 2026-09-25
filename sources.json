@@ -1,4 +1,16 @@
 {
-  "repositories": [],
+  "repositories": [
+    {
+      "enabled": true,
+      "exclude": [
+        "target",
+        "vendor"
+      ],
+      "id": "kafkastream-product-consumer-upa",
+      "kind": "application",
+      "path": "/Users/cdespona/code/kafkastream-product-consumer-upa",
+      "approvedCopilotConfigurationSha256": "7e65bf90d18f3f324ca6af5b016f4b0003b6f0472840de79dba77382ffe0d297"
+    }
+  ],
   "schemaVersion": 1
 }

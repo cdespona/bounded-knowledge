@@ -208,9 +208,9 @@ Governing contract:
 
 | ID | Candidate capability | Status | Contract question or boundary |
 | --- | --- | --- | --- |
-| `S10-P01` | Selection-scoped native Terraform `.tf` declaration inventory | `delivered-in-slice` | Delivered with `python-hcl2==8.1.4`, reviewed topology selection, bounded positioned-tree parsing, and fail-closed whole-line evidence disposition |
-| `S10-P02` | Literal Terraform module sources and direct syntactic references | `delivered-in-slice` | Declared composition remains unresolved; direct references are inventory-only evidence |
-| `S10-P03` | Bounded local `terragrunt.hcl` composition inventory | `delivered-in-slice` | Local source/include/dependency/input-key structure is inventoried while inheritance and values remain unresolved |
+| `S10-P01` | Selection-scoped native Terraform `.tf` declaration inventory | `planned` | Contract frozen for one reviewed Terraform source selection with `python-hcl2==8.1.4`; implementation and dependency installation require separate authorization and parser-gate fixtures |
+| `S10-P02` | Literal Terraform module sources and direct syntactic references | `planned` | Record declared composition without resolving modules, expressions, instances, or relationships |
+| `S10-P03` | Bounded local `terragrunt.hcl` composition inventory | `planned` | Record local source/include/dependency/input-key structure while leaving inheritance and values unresolved |
 | `S10-D01` | Terraform JSON configuration (`.tf.json`) | `deferred` | Version 1 emits a filename-derived unsupported-serialization gap without reading content |
 | `S10-D02` | Terragrunt include, dependency, function, input, and folder-name evaluation | `deferred` | Requires a separate non-executing evaluation and provenance contract; version 1 emits unresolved-composition gaps |
 | `S10-D03` | Module implementation inspection and effective child-resource expansion | `deferred` | Requires explicit local/remote module-source selection, containment, version, integrity, and provenance rules |
