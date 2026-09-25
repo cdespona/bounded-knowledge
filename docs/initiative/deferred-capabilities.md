@@ -201,6 +201,26 @@ Governing contract:
 | `S9-D04` | Helm, Kustomize, overlays, patches, templates, includes, and variable substitution | `deferred` | Requires separate provenance and non-executing resolution contracts |
 | `S9-B01` | Inferring application ownership or runtime deployment from a Kubernetes selection or image literal | `permanent-boundary` | Bindings remain reviewed topology evidence; static declarations do not establish runtime state |
 
+## Slice 10: Terraform and Terragrunt declared composition
+
+Governing contract:
+[`docs/contracts/slice-10-terraform-terragrunt-inventory.md`](../contracts/slice-10-terraform-terragrunt-inventory.md)
+
+| ID | Candidate capability | Status | Contract question or boundary |
+| --- | --- | --- | --- |
+| `S10-P01` | Selection-scoped native Terraform `.tf` declaration inventory | `delivered-in-slice` | Delivered with `python-hcl2==8.1.4`, reviewed topology selection, bounded positioned-tree parsing, and fail-closed whole-line evidence disposition |
+| `S10-P02` | Literal Terraform module sources and direct syntactic references | `delivered-in-slice` | Declared composition remains unresolved; direct references are inventory-only evidence |
+| `S10-P03` | Bounded local `terragrunt.hcl` composition inventory | `delivered-in-slice` | Local source/include/dependency/input-key structure is inventoried while inheritance and values remain unresolved |
+| `S10-D01` | Terraform JSON configuration (`.tf.json`) | `deferred` | Version 1 emits a filename-derived unsupported-serialization gap without reading content |
+| `S10-D02` | Terragrunt include, dependency, function, input, and folder-name evaluation | `deferred` | Requires a separate non-executing evaluation and provenance contract; version 1 emits unresolved-composition gaps |
+| `S10-D03` | Module implementation inspection and effective child-resource expansion | `deferred` | Requires explicit local/remote module-source selection, containment, version, integrity, and provenance rules |
+| `S10-D04` | Terraform override precedence and effective configuration merging | `deferred` | Override files are labeled but never merged or given evaluated precedence |
+| `S10-D05` | Generated Terraform outside recognized excluded trees | `deferred` | Generated provenance cannot be inferred safely from syntax or naming; use reviewed source exclusions |
+| `S10-D06` | Terraform provider schemas, registry metadata, lock metadata, and module downloads | `deferred` | Requires separate network/cache provenance and authorization; version 1 performs no resolution |
+| `S10-B01` | Reading Terraform state, plans, variable-value files, caches, dependency outputs, encrypted values, or secret values | `permanent-boundary` | Static discovery must exclude these inputs without reading them |
+| `S10-B02` | Executing Terraform, Terragrunt, providers, modules, hooks, generators, or source-owned code | `permanent-boundary` | Discovery remains static, deterministic, non-executing, and read-only |
+| `S10-B03` | Claiming effective resources, deployment, existence, ownership, access, health, security, cost, provenance, or runtime behavior from declarations | `permanent-boundary` | Module and Terragrunt composition remains syntactic evidence with explicit unknowns |
+
 ## Maintenance rule
 
 Every future slice must update this register as part of its completion gate:

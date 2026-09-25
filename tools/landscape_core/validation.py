@@ -9,10 +9,12 @@ from .contracts import (
     CONTAINER_KINDS,
     KAFKA_KINDS,
     MANIFEST_KINDS,
+    TERRAFORM_KINDS,
     validate_api_observation,
     validate_container_observation,
     validate_kafka_observation,
     validate_manifest_observation,
+    validate_terraform_observation,
     validate_source_selection,
 )
 from .observations import observation
@@ -91,8 +93,9 @@ def validate_inventory(document, source=None):
             item.get("name") for item in document.get("detectors", [])
             if isinstance(item, dict)
         }
-        if "kubernetes-images" not in detector_names:
-            errors.append("sourceSelection requires the kubernetes-images detector")
+        expected_detector = {"kubernetes": "kubernetes-images", "terraform": "terraform"}.get(source_selection.get("kind")) if isinstance(source_selection, dict) else None
+        if expected_detector is None or expected_detector not in detector_names:
+            errors.append("sourceSelection requires its matching detector")
     if not isinstance(document["observations"], list):
         errors.append("observations must be an array")
         return errors
@@ -193,6 +196,15 @@ def validate_inventory(document, source=None):
                     or source_path.parts[:len(selection_path.parts)]
                     != selection_path.parts
                 ):
+                    errors.append("{}.source.path is outside sourceSelection".format(prefix))
+        if item.get("kind") in TERRAFORM_KINDS:
+            errors.extend(validate_terraform_observation(item, prefix))
+            if not isinstance(source_selection, dict): errors.append("{} requires an inventory sourceSelection".format(prefix))
+            elif item.get("value", {}).get("sourceSelectionId") != source_selection.get("id"): errors.append("{}.value.sourceSelectionId does not match the inventory".format(prefix))
+            elif isinstance(source_ref, dict):
+                source_path = PurePosixPath(source_ref.get("path", ""))
+                selection_path = PurePosixPath(source_selection.get("subpath", ""))
+                if source_path == selection_path or source_path.parts[:len(selection_path.parts)] != selection_path.parts:
                     errors.append("{}.source.path is outside sourceSelection".format(prefix))
 
     if not isinstance(document["excluded"], list):
