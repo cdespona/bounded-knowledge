@@ -49,7 +49,14 @@ bundle pins, and question IDs must be unique across batches (even identical dupl
 rejected). Scope entries and questions are sorted, and the content hash `id` is assigned
 after assembly. Any truncated, empty, multi-object, answered, conflicting, or missing batch
 rejects the whole assembly and nothing is written; no content is dropped or repaired.
-Batch order does not affect the output. Failed responses stay diagnostic artifacts, and
+Batch order does not affect the output.
+
+With `--extracted-dir DIR`, a successful assembly also writes each batch as extracted and
+validated (including its content-hash `id`) to `DIR/<input file stem>.extracted.json`, so
+reviewers can read or diff a batch without the model's prose. This is all-or-nothing with
+the draft: nothing is written on any failure, two inputs with the same stem are rejected,
+and an existing file with different bytes is refused (byte-identical files are left as is).
+Input response files are never modified. Failed responses stay diagnostic artifacts, and
 changing batching requires restarting the affected curator flow from frozen inputs.
 
 ## Consolidation and answer capture

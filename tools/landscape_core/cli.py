@@ -14,7 +14,7 @@ from .contracts import (
 from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
-from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
+from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
 from .git_repository import RepositoryError, commit_sha, require_repository_root
 from .sources import resolve_source
@@ -119,6 +119,7 @@ def build_parser():
     questionnaire_assemble_parser = questionnaire_subparsers.add_parser("assemble", help="merge bounded batch responses into one draft")
     questionnaire_assemble_parser.add_argument("responses", nargs="+")
     questionnaire_assemble_parser.add_argument("--output", required=True)
+    questionnaire_assemble_parser.add_argument("--extracted-dir", help="also write each validated batch as <input stem>.extracted.json")
     questionnaire_consolidate_parser = questionnaire_subparsers.add_parser("consolidate", help="accept a lossless model merge of overlapping questions")
     questionnaire_consolidate_parser.add_argument("draft")
     questionnaire_consolidate_parser.add_argument("response")
@@ -242,7 +243,17 @@ def main(argv=None):
             return 0
         if args.command == "questionnaire" and args.questionnaire_command == "assemble":
             responses = [(str(path), Path(path).read_text(encoding="utf-8")) for path in args.responses]
-            _write_json(assemble_questionnaire(responses), output=args.output)
+            if not args.extracted_dir:
+                _write_json(assemble_questionnaire(responses), output=args.output)
+                return 0
+            draft, batches = assemble_questionnaire(responses, return_batches=True)
+            planned = plan_extracted_files(batches, args.extracted_dir)
+            if Path(args.output).resolve() in [path.resolve() for path, _content in planned]:
+                raise ValueError("--output collides with an extracted batch file")
+            _write_json(draft, output=args.output)
+            for path, content in planned:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
             return 0
         if args.command == "questionnaire" and args.questionnaire_command == "consolidate":
             original = json.loads(Path(args.draft).read_text(encoding="utf-8"))

@@ -13,7 +13,7 @@ TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
 
 from landscape_core.contracts import validate_questionnaire_draft  # noqa: E402
-from landscape_core.questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, record_answers, assemble_questionnaire, consolidate_questionnaire, render_questionnaire  # noqa: E402
+from landscape_core.questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, record_answers, assemble_questionnaire, plan_extracted_files, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire  # noqa: E402
 
 COMMIT_A = "a" * 40
 COMMIT_B = "b" * 40
@@ -333,6 +333,80 @@ class AssembleCliTest(unittest.TestCase):
                                 stderr=subprocess.PIPE, universal_newlines=True)
             self.assertEqual(0, ok.returncode, ok.stderr)
             self.assertEqual([], validate_questionnaire_draft(json.loads(output.read_text(encoding="utf-8"))))
+
+
+class ExtractedDirTest(unittest.TestCase):
+    def run_cli(self, *args):
+        return subprocess.run([str(TOOLS / "landscape"), "questionnaire", "assemble"] + [str(a) for a in args],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name)
+        self.one = self.base / "batch-1.txt"
+        self.two = self.base / "batch-2.txt"
+        self.one.write_text(text(batch([question("q-a", "repo-a", COMMIT_A, BUNDLE_A)])), encoding="utf-8")
+        self.two.write_text(text(batch([question("q-b", "repo-b", COMMIT_B, BUNDLE_B)],
+                                        scope=(("repo-b", COMMIT_B, BUNDLE_B),))), encoding="utf-8")
+        self.out = self.base / "draft.json"
+        self.dir = self.base / "extracted"
+
+    def test_writes_extracted_files(self):
+        result = self.run_cli(self.one, self.two, "--output", self.out, "--extracted-dir", self.dir)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["batch-1.extracted.json", "batch-2.extracted.json"], sorted(p.name for p in self.dir.iterdir()))
+        content = (self.dir / "batch-1.extracted.json").read_text(encoding="utf-8")
+        expected = extract_questionnaire_response(self.one.read_text(encoding="utf-8"))
+        self.assertEqual(json.dumps(expected, indent=2, sort_keys=True) + "\n", content)
+        self.assertEqual([], validate_questionnaire_draft(json.loads(content)))
+        self.assertIn("id", json.loads(content))
+        self.assertTrue(self.one.read_text(encoding="utf-8").startswith("Here is the batch."))
+        before = (self.dir / "batch-2.extracted.json").read_bytes()
+        again = self.run_cli(self.one, self.two, "--output", self.out, "--extracted-dir", self.dir)
+        self.assertEqual(0, again.returncode, again.stderr)
+        self.assertEqual(before, (self.dir / "batch-2.extracted.json").read_bytes())
+
+    def test_nothing_written_on_bad_batch(self):
+        bad = self.base / "bad.txt"
+        bad.write_text("{", encoding="utf-8")
+        result = self.run_cli(self.one, bad, "--output", self.out, "--extracted-dir", self.dir)
+        self.assertEqual(1, result.returncode)
+        self.assertFalse(self.out.exists())
+        self.assertFalse(self.dir.exists())
+
+    def test_duplicate_stem_rejected(self):
+        other = self.base / "sub"
+        other.mkdir()
+        clash = other / "batch-1.md"
+        clash.write_text(self.two.read_text(encoding="utf-8"), encoding="utf-8")
+        result = self.run_cli(self.one, clash, "--output", self.out, "--extracted-dir", self.dir)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("batch-1.extracted.json", result.stderr)
+        self.assertFalse(self.out.exists())
+        self.assertFalse(self.dir.exists())
+
+    def test_refuses_to_overwrite_differing_file(self):
+        self.dir.mkdir()
+        existing = self.dir / "batch-2.extracted.json"
+        existing.write_text("different\n", encoding="utf-8")
+        result = self.run_cli(self.one, self.two, "--output", self.out, "--extracted-dir", self.dir)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("refusing to overwrite", result.stderr)
+        self.assertEqual("different\n", existing.read_text(encoding="utf-8"))
+        self.assertFalse(self.out.exists())
+        self.assertFalse((self.dir / "batch-1.extracted.json").exists())
+
+    def test_flag_absent_unchanged(self):
+        result = self.run_cli(self.one, self.two, "--output", self.out)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["draft.json"], sorted(p.name for p in self.base.iterdir() if p.suffix == ".json"))
+        self.assertFalse(self.dir.exists())
+        pairs = [(str(self.one), self.one.read_text(encoding="utf-8")), (str(self.two), self.two.read_text(encoding="utf-8"))]
+        draft, batches = assemble_questionnaire(pairs, return_batches=True)
+        self.assertEqual(draft, assemble_questionnaire(pairs))
+        self.assertEqual(2, len(plan_extracted_files(batches, self.dir)))
+        self.assertFalse(self.dir.exists())
 
 
 if __name__ == "__main__":
