@@ -740,7 +740,7 @@ def validate_evidence_bundle(document):
         "schemaVersion", "id", "repository", "kind", "commit", "inventorySha256",
         "selectedEvidence", "gaps", "excluded",
     }
-    if not _exact_fields(document, required, {"sourceSelection"}):
+    if not _exact_fields(document, required, {"sourceSelection", "selectionCoverage", "selectionPurpose"}):
         return ["evidence bundle has invalid fields"]
     errors = []
     if document["schemaVersion"] != 1:
@@ -753,6 +753,8 @@ def validate_evidence_bundle(document):
         errors.append("repository must be lowercase kebab-case")
     if not isinstance(document["kind"], str) or document["kind"] not in KINDS:
         errors.append("kind is invalid")
+    if "selectionPurpose" in document and document["selectionPurpose"] != "semantic":
+        errors.append("selectionPurpose is invalid")
     if not isinstance(document["commit"], str) or not SHA.fullmatch(document["commit"]):
         errors.append("commit must be a full hexadecimal Git SHA")
     if not isinstance(document["inventorySha256"], str) or not SHA256.fullmatch(
@@ -816,6 +818,35 @@ def validate_evidence_bundle(document):
                 )
         if ordering != sorted(ordering):
             errors.append("selectedEvidence must be sorted by path and lines")
+
+    coverage = document.get("selectionCoverage")
+    fields = {"candidatePaths", "candidateRanges", "selectedPaths", "selectedRanges", "omittedPaths", "byCategory", "omittedByReason"}
+    if coverage is None:
+        pass
+    elif not _exact_fields(coverage, fields):
+        errors.append("selectionCoverage has invalid fields")
+    elif any(not isinstance(coverage[field], int) or coverage[field] < 0 for field in fields - {"byCategory", "omittedByReason"}):
+        errors.append("selectionCoverage counts must be non-negative integers")
+    elif not isinstance(coverage["byCategory"], list) or not isinstance(coverage["omittedByReason"], list):
+        errors.append("selectionCoverage summaries must be arrays")
+    else:
+        categories = []
+        for item in coverage["byCategory"]:
+            item_fields = {"category", "candidatePaths", "candidateRanges", "selectedPaths", "selectedRanges", "omittedPaths"}
+            if not _exact_fields(item, item_fields) or not _is_non_empty_string(item.get("category")) or any(not isinstance(item.get(field), int) or item[field] < 0 for field in item_fields - {"category"}):
+                errors.append("selectionCoverage.byCategory is invalid")
+                break
+            categories.append(item["category"])
+        if categories != sorted(set(categories)):
+            errors.append("selectionCoverage.byCategory must be sorted and unique")
+        reasons = []
+        for item in coverage["omittedByReason"]:
+            if not _exact_fields(item, {"reason", "paths", "ranges"}) or not _is_non_empty_string(item.get("reason")) or any(not isinstance(item.get(field), int) or item[field] < 0 for field in {"paths", "ranges"}):
+                errors.append("selectionCoverage.omittedByReason is invalid")
+                break
+            reasons.append(item["reason"])
+        if reasons != sorted(set(reasons)):
+            errors.append("selectionCoverage.omittedByReason must be sorted and unique")
 
     gaps = document["gaps"]
     if not isinstance(gaps, list):
@@ -1045,6 +1076,86 @@ def validate_candidate_envelope(document, evidence_bundle=None):
                             "the bundle"
                         ).format(index, field)
                         errors.append(message)
+    return errors
+
+
+def validate_questionnaire_draft(document):
+    """Validate an untrusted, respondent-specific draft Q&A artifact."""
+    required = {"schemaVersion", "id", "respondent", "scope", "questions"}
+    if not _exact_fields(document, required):
+        return ["questionnaire draft has invalid fields"]
+    errors = []
+    if document["schemaVersion"] != 1:
+        errors.append("schemaVersion must be 1")
+    if not isinstance(document["id"], str) or document["id"] != artifact_id(document):
+        errors.append("id does not match the questionnaire draft content")
+    respondent = document["respondent"]
+    if not _exact_fields(respondent, {"id", "role"}) or not all(
+        _is_non_empty_string(respondent.get(field)) for field in ("id", "role")
+    ):
+        errors.append("respondent must contain non-empty id and role")
+    scope = document["scope"]
+    scope_keys = set()
+    if not isinstance(scope, list) or not scope:
+        errors.append("scope must be a non-empty array")
+    else:
+        for index, item in enumerate(scope):
+            prefix = "scope[{}]".format(index)
+            if not _exact_fields(item, {"repository", "commit", "evidenceBundleId"}):
+                errors.append("{} has invalid fields".format(prefix)); continue
+            key = (item.get("repository"), item.get("commit"), item.get("evidenceBundleId"))
+            if (not isinstance(item["repository"], str) or REPOSITORY_ID.fullmatch(item["repository"]) is None
+                    or not isinstance(item["commit"], str) or SHA.fullmatch(item["commit"]) is None
+                    or not isinstance(item["evidenceBundleId"], str) or SHA256.fullmatch(item["evidenceBundleId"]) is None):
+                errors.append("{} is invalid".format(prefix))
+            elif key in scope_keys:
+                errors.append("{} is duplicated".format(prefix))
+            scope_keys.add(key)
+    ids = set()
+    for index, item in enumerate(document["questions"] if isinstance(document["questions"], list) else []):
+        prefix = "questions[{}]".format(index)
+        required_item = {"id", "wording", "reviewType", "links", "whyCodeCannotSettle", "answerStatus"}
+        if not _exact_fields(item, required_item, {"answer"}):
+            errors.append("{} has invalid fields".format(prefix)); continue
+        question_id = item.get("id")
+        if not isinstance(question_id, str) or not REPOSITORY_ID.fullmatch(question_id):
+            errors.append("{}.id is invalid".format(prefix))
+        elif question_id in ids:
+            errors.append("{}.id is duplicated".format(prefix))
+        ids.add(question_id)
+        if not all(_is_non_empty_string(item.get(field)) for field in ("wording", "whyCodeCannotSettle")):
+            errors.append("{}.wording and whyCodeCannotSettle must be non-empty".format(prefix))
+        if item.get("reviewType") not in {"code-answerable", "human-only"}:
+            errors.append("{}.reviewType is invalid".format(prefix))
+        allowed_statuses = ({"unanswered", "accepted", "rejected", "deferred"} if item.get("reviewType") == "code-answerable"
+                            else {"unanswered", "answered", "unknown", "deferred"})
+        if item.get("answerStatus") not in allowed_statuses:
+            errors.append("{}.answerStatus is invalid".format(prefix))
+        links = item.get("links")
+        if not isinstance(links, list) or not links:
+            errors.append("{}.links must be a non-empty array".format(prefix))
+        else:
+            for link_index, link in enumerate(links):
+                link_prefix = "{}.links[{}]".format(prefix, link_index)
+                if not isinstance(link, dict) or link.get("type") not in {"claim", "gap"}:
+                    errors.append("{} is invalid".format(link_prefix)); continue
+                link_required = {"type", "repository", "commit", "evidenceBundleId"}
+                link_required.add("claimId" if link["type"] == "claim" else "gap")
+                if not _exact_fields(link, link_required):
+                    errors.append("{} has invalid fields".format(link_prefix))
+                elif (link["repository"], link["commit"], link["evidenceBundleId"]) not in scope_keys:
+                    errors.append("{} is outside scope".format(link_prefix))
+                elif not _is_non_empty_string(link.get("claimId" if link["type"] == "claim" else "gap")):
+                    errors.append("{} target is invalid".format(link_prefix))
+        answer = item.get("answer")
+        if item.get("answerStatus") == "unanswered":
+            if answer is not None: errors.append("{}.answer is only allowed after a response".format(prefix))
+        elif not _exact_fields(answer, {"text", "answerer", "recordedAt"}) or not all(
+            _is_non_empty_string(answer.get(field)) for field in ("text", "answerer")
+        ) or not _is_datetime(answer.get("recordedAt")):
+            errors.append("{}.answer must preserve text, answerer, and recordedAt".format(prefix))
+    if not isinstance(document["questions"], list) or not document["questions"]:
+        errors.append("questions must be a non-empty array")
     return errors
 
 

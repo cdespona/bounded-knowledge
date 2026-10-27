@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Active working plan |
-| Last updated | 2026-09-18 |
+| Last updated | 2026-10-13 |
 | Primary owner | Technical lead |
 | Repository | `bounded-knowledge` |
 | Purpose | Track the product vision, decisions, roadmap, progress, evidence policy, and open questions for the application-landscape initiative |
@@ -144,7 +144,11 @@ flowchart LR
     MODEL --> CANDIDATE["Untrusted candidate claims"]
     CURATED --> CANDIDATE
     CANDIDATE --> VALIDATE["Deterministic validation"]
-    VALIDATE --> REVIEW["Human review"]
+    VALIDATE --> AUDIT["Copilot evidence and gap audit"]
+    AUDIT --> QUESTIONS["Copilot questionnaire draft"]
+    QUESTIONS --> ANSWERS["Attributed human answers"]
+    ANSWERS --> SYNTHESIS["Copilot draft synthesis"]
+    SYNTHESIS --> REVIEW["Deterministic validation and human review"]
     HUMAN --> REVIEW
     REVIEW --> CATALOG["Canonical catalog"]
 
@@ -158,9 +162,20 @@ flowchart LR
 | Layer | Owns | Must not own |
 | --- | --- | --- |
 | Deterministic tools | Git metadata, file inventory, literal manifests, exact references, schemas, evidence selection, validation, caching | Business meaning or unsupported architectural conclusions |
-| Model agents | Purpose candidates, use-case candidates, terminology, ambiguous relationships, architecture classification, improvement hypotheses | Source mutation or canonical promotion |
-| Human review | Business meaning, terminology acceptance, exceptions, strategic relevance, final decisions | Reconstructing basic deterministic facts manually |
+| Copilot model agents | Purpose candidates, evidence-backed gap audit, respondent-specific questionnaires, answer capture and draft synthesis, terminology, ambiguous relationships, architecture classification, improvement hypotheses | Source mutation or canonical promotion |
+| Human review | Attributed answers to questions code cannot settle, business meaning, terminology acceptance, exceptions, strategic relevance, final decisions | Reconstructing basic deterministic facts manually |
 | Conductor | Sequencing, routing, checkpoints, retries, cost limits, human gates | Parsing, scoring, domain logic, or hidden catalog mutation |
+
+The questionnaire stage follows validation of cartographer candidates. Copilot first
+checks whether the selected evidence can settle each doubt, corrects unsupported or
+overstated candidate claims, and consolidates remaining questions across repositories.
+It then prepares a `to-questionnaire`-style draft for each respondent. Answers remain
+attributed draft testimony, separate from source evidence; unanswered and "I don't know"
+responses remain explicit. Copilot may propose later use-case, terminology, context,
+and relationship hypotheses from those answers, but deterministic validation and a
+human approval gate are required before canonical promotion. Codex contributes the
+contracts and tooling for this flow; it does not conduct the domain interview or make
+the underlying discoveries in Copilot's place.
 
 ## Target knowledge model
 
@@ -447,8 +462,8 @@ questions.
 | Slice 7: Kafka literal inventory | Implemented and validated | Bounded Java, Kotlin, and properties references with explicit gaps and static-only roles |
 | Slice 8: container-image literal inventory | Implemented and validated | Bounded Dockerfile `FROM` image, scratch, and earlier-stage references with explicit gaps |
 | Slice 9: Kubernetes YAML workload-image inventory | Implemented and validated | One reviewed Kubernetes source selection, stable workload/List matrix, literal images, and bounded non-leaking YAML gaps |
-| Slice 10: Terraform and Terragrunt declared-composition inventory | Contract selected; implementation not authorized | One reviewed Terraform application subtree, native `.tf`, bounded local `terragrunt.hcl`, declared modules and local declarations, privacy-preserving evidence, and unresolved composition gaps |
-| Private pilot | Not started | Pilot applications are not yet selected |
+| Slice 10: Terraform and Terragrunt declared-composition inventory | Implemented and validated | One reviewed Terraform application subtree, native `.tf`, bounded local `terragrunt.hcl`, declared modules and local declarations, privacy-preserving evidence, and unresolved composition gaps |
+| Private pilot | Active A/B deterministic refresh completed | A/B same-commit evidence comparison, updated Terraform clean pin, source-owned customization review, six validated active selections; C remains historical and no model call has run |
 | Canonical promotion | Not started | Requires reviewed target model and pilot |
 | Local website | Not started | Information architecture defined in this plan |
 | Landscape skill suite | Not started | Responsibilities defined in this plan |
@@ -575,7 +590,8 @@ Pilot acceptance criteria:
 | 2026-09-18 | Narrow Kafka literal inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Exact Kafka contexts gate topic and schema-subject references; unsupported forms remain visible gaps |
 | 2026-09-21 | Narrow Dockerfile container-image inventory implemented through contract, isolated fixture/test work, central integration, and independent review | Literal external images, scratch, and earlier build stages are distinct; six review findings were closed and 93 tests passed |
 | 2026-09-22 | Selection-scoped Kubernetes YAML workload-image inventory implemented after contract research and an explicit user decision | Plain YAML, one reviewed topology selection, stable workload/List forms, three container categories, and safe bounded parsing are supported; five independent-review findings were closed and 107 tests passed; Compose and Kubernetes JSON remain deferred |
-| 2026-09-25 | Terraform and Terragrunt declared-composition direction selected and contract frozen after a one-question-at-a-time review | Version 1 targets one reviewed application subtree, native `.tf` and local `terragrunt.hcl`; `python-hcl2==8.1.4` is the approved direct parser dependency, subject to fixture gates; module implementations, inherited values, effective resources, state, plans, variable-value files, execution, and resolution remain excluded; implementation remains separately gated |
+| 2026-09-25 | Terraform and Terragrunt declared-composition inventory implemented and validated | Version 1 targets one reviewed application subtree, native `.tf` and local `terragrunt.hcl`; `python-hcl2==8.1.4` is the pinned direct parser dependency. Parser-gate, safety, evidence-routing, and deterministic discovery coverage passed; the complete deterministic suite passed 110 tests. Module implementations, inherited values, effective resources, state, plans, variable-value files, execution, and resolution remain excluded. |
+| 2026-09-30 | Active A/B deterministic pilot refresh completed | Six active selections validated at clean pins; A/B selector excludes 19 A customizations, 79 A/B paths remain at the file cap, and 113 synthetic tests passed on Python 3.13 with pinned dependencies. No model call or catalog promotion ran. |
 
 ## Risks and mitigations
 
@@ -596,7 +612,7 @@ Pilot acceptance criteria:
 
 These questions do not block documenting the plan, but they affect later implementation:
 
-1. Which three applications and infrastructure selections form the pilot?
+1. Which simpler third application should eventually join the active A/B and reviewed `pro` infrastructure selections?
 2. What is the first agreed strategy-input format after testing the proposed record through
    an interview?
 3. Which contract formats occur in the real pilot: OpenAPI, AsyncAPI, Avro, JSON Schema,
@@ -615,12 +631,10 @@ These questions do not block documenting the plan, but they affect later impleme
 
 ## Immediate next decision
 
-Slice 10 is the explicitly selected Terraform and Terragrunt declared-composition
-direction. Its contract is frozen in
-`docs/contracts/slice-10-terraform-terragrunt-inventory.md`; `python-hcl2==8.1.4` is the
-approved direct parser dependency, with constrained Python-3.9-compatible transitive
-versions and mandatory parser-gate fixtures. Implementation, dependency installation,
-private-repository access, commit, and push remain unauthorized.
-OpenAPI and AsyncAPI YAML parity, Compose, Kubernetes JSON, Helm, Kustomize, broader
-Dockerfile and Kafka forms, Conductor, the private pilot, and promotion remain deferred
-until their own contract research and authorization.
+The next stage is the Copilot-led questionnaire flow described above. It needs a
+reviewable draft Q&A contract and deterministic capture before any domain answer can
+inform later semantic synthesis. A new paid Copilot trial and canonical promotion
+remain separately gated. The existing active A/B deterministic refresh and historical
+C packet are distinct pilot records; their source commits and coverage must be checked
+before a fresh model run. OpenAPI and AsyncAPI YAML parity, Compose, Kubernetes JSON,
+Helm, Kustomize, broader Dockerfile and Kafka forms, and Conductor remain deferred.

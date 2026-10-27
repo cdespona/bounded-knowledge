@@ -34,9 +34,10 @@ slice delivers or newly defers a capability.
 
 ## Deterministic commands
 
-The tooling requires Python 3.9 or later and Git. Selection-scoped Kubernetes YAML
-inventory additionally uses the pinned `PyYAML==6.0.2` dependency; the remaining
-detectors use the Python standard library.
+The tooling requires Python 3.9 or later and Git. Install the pinned dependencies from
+`requirements.txt` before running discovery or tests. Kubernetes YAML inventory uses
+`PyYAML==6.0.2`; Terraform and Terragrunt inventory uses `python-hcl2==8.1.4` with
+constrained parser dependencies. The other detectors use the Python standard library.
 
 ```text
 ./tools/landscape preflight /path/to/repository
@@ -48,8 +49,11 @@ detectors use the Python standard library.
 ./tools/landscape sources validate sources.json
 ./tools/landscape sources resolve application-id --registry sources.json
 ./tools/landscape evidence select work/application-id.json --source /path/to/repository --output work/application-id-evidence.json
+./tools/landscape evidence select work/application-id.json --source /path/to/repository --output work/application-id-semantic.evidence.json --purpose semantic
 ./tools/landscape candidate extract work/application-id-response.txt --output work/application-id-candidate.json
 ./tools/landscape candidate validate work/application-id-candidate.json --evidence work/application-id-evidence.json
+./tools/landscape questionnaire validate work/respondent-draft.json
+./tools/landscape questionnaire render work/respondent-draft.json --output work/respondent-questionnaire.md
 ./tools/landscape catalog validate work/landscape-catalog.json
 ./tools/landscape topology validate work/source-topology.json --sources sources.json --catalog work/landscape-catalog.json
 ```
@@ -111,10 +115,22 @@ workload CRDs, runtime deployment, and ownership inference remain outside the co
 The exact boundary is documented in
 `docs/contracts/slice-9-kubernetes-image-inventory.md`.
 
+Selection-scoped discovery also inventories native Terraform `.tf` declarations and a
+bounded local `terragrunt.hcl` composition surface. It requires one exact reviewed
+Terraform `sourceSelections` entry, records direct syntactic references and unresolved
+composition gaps, and does not evaluate modules, values, state, plans, or effective
+infrastructure. The exact boundary is documented in
+`docs/contracts/slice-10-terraform-terragrunt-inventory.md`.
+
 Captured model responses are deterministically reduced to exactly one JSON object, then
 validated against the exact selected evidence bundle before they can reach a later human
 gate. The read-only repository cartographer and its direct Copilot CLI trial procedure are
 documented in `docs/contracts/slice-4.md`.
+
+The post-candidate questionnaire stage keeps untrusted structured draft Q&A as the source
+of truth and renders reviewable Markdown without promoting testimony into canonical claims.
+See `docs/contracts/slice-11-questionnaire-draft.md`.
+
 
 The canonical knowledge-model and source-topology contracts distinguish logical
 applications and deployables from physical repositories and monorepo subpaths. `catalog

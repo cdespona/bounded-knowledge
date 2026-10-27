@@ -74,9 +74,9 @@ def exclusion_reason(relative_path: Path, size: Optional[int] = None) -> Optiona
         return directory_reason
 
     name = relative_path.name.lower()
-    if name in SENSITIVE_EXACT_NAMES or name.startswith(".env."):
+    if name in SENSITIVE_EXACT_NAMES or name.startswith(".env"):
         return "sensitive-file"
-    if name.endswith(SENSITIVE_SUFFIXES) or ".tfstate." in name:
+    if name.endswith(SENSITIVE_SUFFIXES + (".tfvars", ".tfvars.json", ".tfplan")) or ".tfstate." in name:
         return "sensitive-file"
     if (name.startswith("secret") or name.endswith("secret.yaml") or name.endswith("secret.yml")):
         return "potential-secret-file"

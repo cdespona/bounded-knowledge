@@ -23,6 +23,7 @@ from landscape_core.contracts import (  # noqa: E402
     validate_source_registry,
     validate_source_resolution,
     validate_source_topology,
+    validate_questionnaire_draft,
 )
 from landscape_core.candidates import validate_candidate  # noqa: E402
 from landscape_core.observations import observation  # noqa: E402
@@ -198,6 +199,10 @@ class ContractTest(unittest.TestCase):
         self.assertTrue(
             validate_candidate_envelope(load("candidate-envelope.invalid.json"), bundle)
         )
+
+    def test_questionnaire_draft_examples(self):
+        self.assertEqual([], validate_questionnaire_draft(load("questionnaire-draft.valid.json")))
+        self.assertTrue(validate_questionnaire_draft(load("questionnaire-draft.invalid.json")))
 
     def test_landscape_catalog_examples(self):
         self.assertEqual([], validate_landscape_catalog(

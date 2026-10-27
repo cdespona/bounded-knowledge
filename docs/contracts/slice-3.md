@@ -37,6 +37,7 @@ produce `manifest-gap` observations rather than guessed declarations.
 
 ```text
 ./tools/landscape evidence select INVENTORY --source SOURCE --output PATH
+./tools/landscape evidence select INVENTORY --source SOURCE --output PATH --purpose semantic
 ```
 
 `SOURCE` is an independent source-repository root. The command:
@@ -61,15 +62,32 @@ stale, dirty, or unsafe input. Validation failures occur before the output is wr
 | Boundary | Slice 3 limit |
 | --- | ---: |
 | Source file size | 2 MiB |
-| Selected source paths | 64 |
+| Selected source paths | 256 |
 | Selected ranges per source path | 16 |
 | Lines per selected range | 200 |
 | UTF-8 content per selected range | 16 KiB |
-| UTF-8 content in one bundle | 256 KiB |
+| UTF-8 content in one bundle | 2 MiB |
 
 Truncation produces a `content-truncated` gap. Paths omitted by file, range, or total
-limits appear in `excluded` with a stable selection-limit reason. Selection order is
-source path and line range; observation ID arrays are sorted and unique.
+limits appear in `excluded` with a stable selection-limit reason. Repository-owned
+Copilot customization paths are excluded by default as `source-owned-customization`;
+their contents never enter selected evidence. Candidates are admitted in stable literal-
+evidence category order (manifest, API contract, Kafka literal, container literal, then
+other repository file), with path and line range as tie-breakers. `selectionCoverage`
+records candidate, selected, and omitted path/range counts by category and omission
+reason; it reports selector coverage, not semantic completeness. Observation ID arrays
+remain sorted and unique.
+
+`--purpose semantic` applies the same safety and content bounds to every application
+inventory. It selects literal API and Kafka observations and conventionally located
+production Java/Kotlin code (including module-local `src/main/java` and
+`src/main/kotlin`) and `.avsc`/`.proto` declarations under `src/main` in stable order:
+entry points, ports, schema declarations, application services, messages, persistence,
+domain types, then mappers. Other paths,
+including tests, resources, documentation, and unclassified source files, are recorded
+as `semantic-scope` omissions. The bundle records `selectionPurpose: semantic`; coverage
+counts every candidate and omission. Path and filename roles only route evidence; they
+do not establish a business use case, actor, outcome, term definition, or absence.
 
 The inventory digest is SHA-256 over compact canonical JSON with sorted keys. Each
 selected content digest is SHA-256 over the exact UTF-8 content in the bundle. The

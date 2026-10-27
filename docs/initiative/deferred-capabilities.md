@@ -73,7 +73,7 @@ Governing contract: [`docs/contracts/slice-3.md`](../contracts/slice-3.md)
 | `S3-D02` | Maven transitive dependency resolution | `deferred` | Requires dependency metadata and network/cache provenance without executing source builds |
 | `S3-D03` | Full Groovy/Kotlin Gradle parsing | `deferred` | Requires a safe parser that does not execute scripts |
 | `S3-D04` | Gradle version catalogs, platforms, project dependencies, named maps, composite builds, and plugin/dependency-resolution management | `deferred` | Add only through exact contractually supported forms |
-| `S3-D05` | Semantic or relevance-ranked evidence selection | `deferred` | Requires deterministic ranking and explicit protection against path-order omissions |
+| `S3-D05` | Semantic or relevance-ranked evidence selection | `delivered-later` | Deterministic semantic purpose ranks safe production code and reports out-of-scope and limit omissions; business meaning remains for review |
 | `S3-D06` | Evidence-bundle kind bound directly to approved source resolution instead of manifest fallback | `deferred` | Integrate source-resolution artifacts into evidence selection |
 | `S3-D07` | Evidence bundles larger than the current file, range, line, and byte limits | `deferred` | Revise only with measured need, cost, and privacy impact |
 | `S3-B01` | Executing Maven, Gradle, wrappers, plugins, hooks, or source-owned code to discover metadata | `permanent-boundary` | Discovery remains static and read-only |
@@ -208,9 +208,9 @@ Governing contract:
 
 | ID | Candidate capability | Status | Contract question or boundary |
 | --- | --- | --- | --- |
-| `S10-P01` | Selection-scoped native Terraform `.tf` declaration inventory | `planned` | Contract frozen for one reviewed Terraform source selection with `python-hcl2==8.1.4`; implementation and dependency installation require separate authorization and parser-gate fixtures |
-| `S10-P02` | Literal Terraform module sources and direct syntactic references | `planned` | Record declared composition without resolving modules, expressions, instances, or relationships |
-| `S10-P03` | Bounded local `terragrunt.hcl` composition inventory | `planned` | Record local source/include/dependency/input-key structure while leaving inheritance and values unresolved |
+| `S10-P01` | Selection-scoped native Terraform `.tf` declaration inventory | `delivered-in-slice` | Implemented for one reviewed Terraform source selection with `python-hcl2==8.1.4`; parser-gate fixtures and deterministic validation passed |
+| `S10-P02` | Literal Terraform module sources and direct syntactic references | `delivered-in-slice` | Implemented without resolving modules, expressions, instances, or relationships |
+| `S10-P03` | Bounded local `terragrunt.hcl` composition inventory | `delivered-in-slice` | Implemented for local source/include/dependency/input-key structure while leaving inheritance and values unresolved |
 | `S10-D01` | Terraform JSON configuration (`.tf.json`) | `deferred` | Version 1 emits a filename-derived unsupported-serialization gap without reading content |
 | `S10-D02` | Terragrunt include, dependency, function, input, and folder-name evaluation | `deferred` | Requires a separate non-executing evaluation and provenance contract; version 1 emits unresolved-composition gaps |
 | `S10-D03` | Module implementation inspection and effective child-resource expansion | `deferred` | Requires explicit local/remote module-source selection, containment, version, integrity, and provenance rules |

@@ -36,10 +36,12 @@
     "commit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
     "inventorySha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "sourceSelection": { "$ref": "#/$defs/sourceSelection" },
+    "selectionPurpose": { "const": "semantic" },
     "selectedEvidence": {
       "type": "array",
       "items": { "$ref": "#/$defs/selectedEvidence" }
     },
+    "selectionCoverage": { "$ref": "#/$defs/selectionCoverage" },
     "gaps": {
       "type": "array",
       "items": { "$ref": "#/$defs/gap" }
@@ -88,6 +90,20 @@
           "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "uniqueItems": true
         }
+      }
+    },
+    "selectionCoverage": {
+      "type": "object",
+      "required": ["candidatePaths", "candidateRanges", "selectedPaths", "selectedRanges", "omittedPaths", "byCategory", "omittedByReason"],
+      "additionalProperties": false,
+      "properties": {
+        "candidatePaths": {"type": "integer", "minimum": 0},
+        "candidateRanges": {"type": "integer", "minimum": 0},
+        "selectedPaths": {"type": "integer", "minimum": 0},
+        "selectedRanges": {"type": "integer", "minimum": 0},
+        "omittedPaths": {"type": "integer", "minimum": 0},
+        "byCategory": {"type": "array"},
+        "omittedByReason": {"type": "array"}
       }
     },
     "gap": {

@@ -1,0 +1,9 @@
+{
+  "id": "f06c65a113e798ab4e5557fb67aa0262611879478d93c2b0ec97abf261d003bc",
+  "questions": [
+    {"answer": {"answerer": "domain-expert", "recordedAt": "2026-10-13T10:00:00Z", "text": "I do not know the runtime binding."}, "answerStatus": "unknown", "id": "runtime-binding", "links": [{"claimId": "runtime-link", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "evidenceBundleId": "37e18ce2e918bb87f5f2dafe2f08925d80d43cac330f0e0d230be97e15af7e2b", "repository": "synthetic-java-service", "type": "claim"}], "reviewType": "human-only", "whyCodeCannotSettle": "The selected evidence contains no deployment binding.", "wording": "Which runtime endpoint is approved for this interface?"},
+    {"answerStatus": "unanswered", "id": "citation-audit", "links": [{"commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "evidenceBundleId": "37e18ce2e918bb87f5f2dafe2f08925d80d43cac330f0e0d230be97e15af7e2b", "gap": "dynamic-expression at build.gradle.kts:8", "repository": "synthetic-java-service", "type": "gap"}], "reviewType": "code-answerable", "whyCodeCannotSettle": "The current selected excerpt is incomplete and needs an evidence audit.", "wording": "Recheck whether a selected literal can correct this gap."}
+  ],
+  "respondent": {"id": "platform-owner", "role": "Platform owner"}, "schemaVersion": 1,
+  "scope": [{"commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "evidenceBundleId": "37e18ce2e918bb87f5f2dafe2f08925d80d43cac330f0e0d230be97e15af7e2b", "repository": "synthetic-java-service"}]
+}

@@ -136,6 +136,12 @@ class TerraformDetector:
                 if node.data != "get_attr_expr_term": continue
                 ref = _traversal(node)
                 bits = ref.split(".") if ref else []
+                if not bits:
+                    key = (node.meta.line, "unsupported-reference-expression")
+                    if key not in seen:
+                        seen.add(key)
+                        result.append(self._gap(root,path,repository,commit,node.meta.line,"unsupported-reference-expression"))
+                    continue
                 accepted = ((bits[0] in {"var", "local", "module"} and len(bits) >= 2) or (bits[0] == "data" and len(bits) >= 3) or (len(bits) >= 2 and bits[0] not in {"var", "local", "module", "data"}))
                 recorded = ".".join(bits[:3] if bits[0] == "data" else bits[:2])
                 if accepted and (node.meta.line, recorded) not in seen:

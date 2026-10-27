@@ -54,7 +54,7 @@ class LandscapeCliTest(unittest.TestCase):
         result = self.run_cli("--help")
         self.assertEqual(0, result.returncode)
         self.assertIn(
-            "{preflight,discover,validate,status,sources,evidence,candidate,catalog,topology}",
+            "{preflight,discover,validate,status,sources,evidence,candidate,questionnaire,catalog,topology}",
             result.stdout,
         )
         self.assertEqual("", result.stderr)
@@ -216,6 +216,31 @@ class LandscapeCliTest(unittest.TestCase):
             self.assertTrue(invalid.stderr.startswith("error: "), name)
             self.assertFalse(invalid_output.exists(), name)
 
+    def test_questionnaire_validate_extract_and_render_contract(self):
+        fixtures = PROJECT / "examples" / "contracts"
+        draft = fixtures / "questionnaire-draft.valid.json"
+        valid = self.run_cli("questionnaire", "validate", draft)
+        self.assertEqual(0, valid.returncode)
+        self.assertEqual({"errors": [], "valid": True}, json.loads(valid.stdout))
+        self.assertEqual(1, self.run_cli(
+            "questionnaire", "validate", fixtures / "questionnaire-draft.invalid.json"
+        ).returncode)
+        response = self.base / "questionnaire-response.txt"
+        response.write_text("Draft follows.\n" + draft.read_text(encoding="utf-8"), encoding="utf-8")
+        extracted = self.base / "questionnaire.json"
+        self.assertEqual(0, self.run_cli(
+            "questionnaire", "extract", response, "--output", extracted
+        ).returncode)
+        self.assertEqual(
+            json.loads(draft.read_text(encoding="utf-8"))["id"],
+            json.loads(extracted.read_text(encoding="utf-8"))["id"],
+        )
+        rendered = self.base / "questionnaire.md"
+        self.assertEqual(0, self.run_cli(
+            "questionnaire", "render", extracted, "--output", rendered
+        ).returncode)
+        self.assertIn("runtime-binding", rendered.read_text(encoding="utf-8"))
+
     def test_catalog_validate_contract(self):
         fixtures = PROJECT / "examples" / "contracts"
         catalog = fixtures / "landscape-catalog.valid.json"
@@ -319,6 +344,16 @@ class LandscapeCliTest(unittest.TestCase):
         self.assertEqual(0, second.returncode)
         self.assertEqual(first_path.read_bytes(), second_path.read_bytes())
 
+        semantic_path = self.base / "semantic-evidence.json"
+        semantic = self.run_cli(
+            "evidence", "select", inventory_path, "--source", self.repository,
+            "--output", semantic_path, "--purpose", "semantic",
+        )
+        self.assertEqual(0, semantic.returncode, semantic.stderr)
+        semantic_bundle = json.loads(semantic_path.read_text(encoding="utf-8"))
+        self.assertEqual("semantic", semantic_bundle["selectionPurpose"])
+        self.assertIn("semantic-scope", {item["reason"] for item in semantic_bundle["excluded"]})
+
     def test_evidence_select_rejects_stale_and_dirty_sources(self):
         inventory_path = self.base / "inventory.json"
         self.assertEqual(0, self.run_cli(
@@ -362,8 +397,8 @@ class LandscapeCliTest(unittest.TestCase):
         self.assertFalse(output.exists())
 
     def test_evidence_selection_enforces_content_bounds(self):
-        for index in range(18):
-            path = self.repository / "notes-{:02d}.md".format(index)
+        for index in range(130):
+            path = self.repository / "notes-{:03d}.md".format(index)
             path.write_text("x" * (17 * 1024) + "\n", encoding="utf-8")
         git(self.repository, "add", ".")
         git(self.repository, "commit", "-q", "-m", "Add bounded evidence fixtures")
@@ -381,7 +416,7 @@ class LandscapeCliTest(unittest.TestCase):
         bundle = json.loads(output.read_text(encoding="utf-8"))
         self.assertLessEqual(
             sum(len(item["content"].encode("utf-8")) for item in bundle["selectedEvidence"]),
-            256 * 1024,
+            2 * 1024 * 1024,
         )
         self.assertTrue(all(
             len(item["content"].encode("utf-8")) <= 16 * 1024

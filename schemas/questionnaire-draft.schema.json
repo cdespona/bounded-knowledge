@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/questionnaire-draft.schema.json",
+  "title": "Untrusted respondent-specific draft Q&A",
+  "type": "object",
+  "required": ["schemaVersion", "id", "respondent", "scope", "questions"],
+  "additionalProperties": false
+}

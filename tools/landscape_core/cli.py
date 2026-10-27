@@ -14,6 +14,8 @@ from .contracts import (
 from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
+from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
+from .contracts import validate_questionnaire_draft
 from .git_repository import RepositoryError, commit_sha, require_repository_root
 from .sources import resolve_source
 from .validation import validate_inventory
@@ -87,6 +89,8 @@ def build_parser():
     evidence_select_parser.add_argument("inventory")
     evidence_select_parser.add_argument("--source", required=True)
     evidence_select_parser.add_argument("--output", required=True)
+    evidence_select_parser.add_argument("--purpose", choices=("general", "semantic"), default="general")
+
 
     candidate_parser = subparsers.add_parser(
         "candidate", help="validate model-produced candidate profiles"
@@ -104,6 +108,34 @@ def build_parser():
     )
     candidate_extract_parser.add_argument("response")
     candidate_extract_parser.add_argument("--output", required=True)
+
+    questionnaire_parser = subparsers.add_parser("questionnaire", help="validate and render draft Q&A")
+    questionnaire_subparsers = questionnaire_parser.add_subparsers(dest="questionnaire_command", required=True)
+    questionnaire_validate_parser = questionnaire_subparsers.add_parser("validate", help="validate a draft Q&A record")
+    questionnaire_validate_parser.add_argument("draft")
+    questionnaire_extract_parser = questionnaire_subparsers.add_parser("extract", help="extract one draft from a model response")
+    questionnaire_extract_parser.add_argument("response")
+    questionnaire_extract_parser.add_argument("--output", required=True)
+    questionnaire_assemble_parser = questionnaire_subparsers.add_parser("assemble", help="merge bounded batch responses into one draft")
+    questionnaire_assemble_parser.add_argument("responses", nargs="+")
+    questionnaire_assemble_parser.add_argument("--output", required=True)
+    questionnaire_consolidate_parser = questionnaire_subparsers.add_parser("consolidate", help="accept a lossless model merge of overlapping questions")
+    questionnaire_consolidate_parser.add_argument("draft")
+    questionnaire_consolidate_parser.add_argument("response")
+    questionnaire_consolidate_parser.add_argument("--output", required=True)
+    questionnaire_template_parser = questionnaire_subparsers.add_parser("answers-template", help="write an empty answer sheet for the human-only questions")
+    questionnaire_template_parser.add_argument("draft")
+    questionnaire_template_parser.add_argument("--output", required=True)
+    questionnaire_template_parser.add_argument("--force", action="store_true", help="overwrite an existing sheet (discards its edits)")
+    questionnaire_template_parser.add_argument("--review-type", choices=["human-only", "code-answerable"], default="human-only")
+    questionnaire_record_parser = questionnaire_subparsers.add_parser("record", help="record an attributed answer sheet into a draft")
+    questionnaire_record_parser.add_argument("draft")
+    questionnaire_record_parser.add_argument("answers")
+    questionnaire_record_parser.add_argument("--output", required=True)
+    questionnaire_record_parser.add_argument("--recorded-at", help="override the recording time (ISO 8601 with timezone)")
+    questionnaire_render_parser = questionnaire_subparsers.add_parser("render", help="render a validated draft as Markdown")
+    questionnaire_render_parser.add_argument("draft")
+    questionnaire_render_parser.add_argument("--output", required=True)
 
     catalog_parser = subparsers.add_parser(
         "catalog", help="validate canonical landscape knowledge"
@@ -185,8 +217,9 @@ def main(argv=None):
 
         if args.command == "evidence" and args.evidence_command == "select":
             inventory = json.loads(Path(args.inventory).read_text(encoding="utf-8"))
-            _write_json(select_evidence(inventory, args.source), output=args.output)
+            _write_json(select_evidence(inventory, args.source, purpose=args.purpose), output=args.output)
             return 0
+
 
         if args.command == "candidate" and args.candidate_command == "validate":
             candidate = json.loads(Path(args.candidate).read_text(encoding="utf-8"))
@@ -198,6 +231,42 @@ def main(argv=None):
         if args.command == "candidate" and args.candidate_command == "extract":
             response = Path(args.response).read_text(encoding="utf-8")
             _write_json(extract_candidate_response(response), output=args.output)
+            return 0
+
+        if args.command == "questionnaire" and args.questionnaire_command == "validate":
+            errors = validate_questionnaire_draft(json.loads(Path(args.draft).read_text(encoding="utf-8")))
+            _write_json({"valid": not errors, "errors": errors})
+            return 0 if not errors else 1
+        if args.command == "questionnaire" and args.questionnaire_command == "extract":
+            _write_json(extract_questionnaire_response(Path(args.response).read_text(encoding="utf-8")), output=args.output)
+            return 0
+        if args.command == "questionnaire" and args.questionnaire_command == "assemble":
+            responses = [(str(path), Path(path).read_text(encoding="utf-8")) for path in args.responses]
+            _write_json(assemble_questionnaire(responses), output=args.output)
+            return 0
+        if args.command == "questionnaire" and args.questionnaire_command == "consolidate":
+            original = json.loads(Path(args.draft).read_text(encoding="utf-8"))
+            _write_json(consolidate_questionnaire(original, Path(args.response).read_text(encoding="utf-8")), output=args.output)
+            return 0
+        if args.command == "questionnaire" and args.questionnaire_command == "answers-template":
+            if Path(args.output).exists() and not args.force:
+                raise ValueError("{} exists; refusing to overwrite it (use --force to discard its edits)".format(args.output))
+            sheet = answers_template(json.loads(Path(args.draft).read_text(encoding="utf-8")), args.review_type)
+            if Path(args.output).suffix == ".md":
+                Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+                Path(args.output).write_text(answers_template_markdown(sheet), encoding="utf-8")
+            else:
+                _write_json(sheet, output=args.output)
+            return 0
+        if args.command == "questionnaire" and args.questionnaire_command == "record":
+            draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
+            raw = Path(args.answers).read_text(encoding="utf-8")
+            sheet = parse_answers_markdown(raw) if Path(args.answers).suffix == ".md" else json.loads(raw)
+            _write_json(record_answers(draft, sheet, args.recorded_at), output=args.output)
+            return 0
+        if args.command == "questionnaire" and args.questionnaire_command == "render":
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(render_questionnaire(json.loads(Path(args.draft).read_text(encoding="utf-8"))), encoding="utf-8")
             return 0
 
         if args.command == "catalog" and args.catalog_command == "validate":

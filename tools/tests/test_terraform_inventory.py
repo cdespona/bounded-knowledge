@@ -69,6 +69,17 @@ class TerraformInventoryTest(unittest.TestCase):
         self.assertNotIn("secret", str(inventory))
         self.assertIn({"path": "infra/app/oversized.tf", "reason": "file-too-large"}, inventory["excluded"])
 
+    def test_indexed_attribute_expression_is_a_gap_without_losing_direct_reference(self):
+        (self.app / "output.tf").write_text(
+            'output "example" { value = var.items[0].name }\n', encoding="utf-8"
+        )
+        self.commit()
+        inventory = self.inventory()
+        self.assertEqual([], validate_inventory(inventory, source=self.root))
+        values = [item["value"] for item in inventory["observations"]]
+        self.assertIn("var.items", [value.get("reference") for value in values])
+        self.assertIn("unsupported-reference-expression", [value.get("code") for value in values])
+
     @unittest.skipUnless(hasattr(os, "symlink"), "symlinks unavailable")
     def test_symlink_is_excluded_without_following(self):
         outside = self.root / "outside.tf"; outside.write_text('resource "x" "secret" { }', encoding="utf-8")
