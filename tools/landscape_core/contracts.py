@@ -23,6 +23,10 @@ MANIFEST_KINDS = {
 }
 API_KINDS = {"api-document", "api-operation", "api-gap"}
 KAFKA_KINDS = {"kafka-topic-reference", "kafka-schema-reference", "kafka-gap"}
+CONFIG_KINDS = {"config-property", "config-gap"}
+CONFIG_FORMS = {"properties", "yaml"}
+CONFIG_DISPOSITIONS = {"literal", "placeholder", "withheld", "empty"}
+CONFIG_RESOURCES = {"jdbc", "sqs", "kafka", "kafka-topic", "schema-registry", "amqp"}
 CONTAINER_KINDS = {
     "container-image-reference", "container-stage-reference", "container-gap"
 }
@@ -393,6 +397,47 @@ def validate_api_observation(item, prefix="observation"):
 
     if "operationId" in value and not _is_non_empty_string(value["operationId"]):
         errors.append("{}.value.operationId must be a non-empty string".format(prefix))
+    return errors
+
+
+def validate_config_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for an application configuration observation."""
+    if not isinstance(item, dict):
+        return ["{} must be an object".format(prefix)]
+    kind = item.get("kind")
+    if not isinstance(kind, str) or kind not in CONFIG_KINDS:
+        return ["{}.kind is not a configuration observation kind".format(prefix)]
+    errors = validate_source_reference(item.get("source"), prefix + ".source", kind == "config-gap")
+    value = item.get("value")
+    if not isinstance(value, dict):
+        return errors + ["{}.value must be an object".format(prefix)]
+    if value.get("form") not in CONFIG_FORMS:
+        errors.append("{}.value.form is invalid".format(prefix))
+    if kind == "config-gap":
+        if not _exact_fields(value, {"form", "code", "detail"}):
+            errors.append("{}.value has invalid config-gap fields".format(prefix))
+        code = value.get("code")
+        if not isinstance(code, str) or not REPOSITORY_ID.fullmatch(code):
+            errors.append("{}.value.code must be lowercase kebab-case".format(prefix))
+        if not _is_non_empty_string(value.get("detail")):
+            errors.append("{}.value.detail must be a non-empty string".format(prefix))
+        return errors
+    if not _exact_fields(value, {"key", "profile", "form", "line", "disposition", "value", "resource"}):
+        return errors + ["{}.value has invalid config-property fields".format(prefix)]
+    if not _is_non_empty_string(value["key"]):
+        errors.append("{}.value.key must be a non-empty string".format(prefix))
+    if value["profile"] is not None and not _is_non_empty_string(value["profile"]):
+        errors.append("{}.value.profile must be null or a non-empty string".format(prefix))
+    if type(value["line"]) is not int or value["line"] < 1:
+        errors.append("{}.value.line must be a positive integer".format(prefix))
+    if value["disposition"] not in CONFIG_DISPOSITIONS:
+        errors.append("{}.value.disposition is invalid".format(prefix))
+    elif (value["value"] is None) != (value["disposition"] == "withheld"):
+        errors.append("{}.value.value must be null exactly when the disposition is withheld".format(prefix))
+    elif value["value"] is not None and not isinstance(value["value"], str):
+        errors.append("{}.value.value must be a string".format(prefix))
+    if value["resource"] is not None and value["resource"] not in CONFIG_RESOURCES:
+        errors.append("{}.value.resource is invalid".format(prefix))
     return errors
 
 
