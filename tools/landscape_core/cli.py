@@ -14,6 +14,7 @@ from .contracts import (
 from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
+from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
 from .git_repository import RepositoryError, commit_sha, require_repository_root
@@ -148,6 +149,23 @@ def build_parser():
         "validate", help="validate a landscape catalog"
     )
     catalog_validate_parser.add_argument("catalog")
+    catalog_extract_parser = catalog_subparsers.add_parser(
+        "extract", help="extract one proposed catalog from a model response"
+    )
+    catalog_extract_parser.add_argument("response")
+    catalog_extract_parser.add_argument("--output", required=True)
+    catalog_propose_parser = catalog_subparsers.add_parser(
+        "propose-validate", help="validate a proposed catalog against answers and evidence"
+    )
+    catalog_propose_parser.add_argument("proposal")
+    catalog_propose_parser.add_argument("--draft", required=True)
+    catalog_propose_parser.add_argument("--evidence", required=True, nargs="+")
+    catalog_review_parser = catalog_subparsers.add_parser(
+        "review", help="render a Markdown review of a proposed catalog"
+    )
+    catalog_review_parser.add_argument("proposal")
+    catalog_review_parser.add_argument("--current")
+    catalog_review_parser.add_argument("--output", required=True)
 
     topology_parser = subparsers.add_parser(
         "topology", help="validate logical source selections and bindings"
@@ -285,6 +303,26 @@ def main(argv=None):
             errors = validate_landscape_catalog(catalog)
             _write_json({"valid": not errors, "errors": errors})
             return 0 if not errors else 1
+
+        if args.command == "catalog" and args.catalog_command == "extract":
+            _write_json(extract_catalog_proposal(Path(args.response).read_text(encoding="utf-8")), output=args.output)
+            return 0
+        if args.command == "catalog" and args.catalog_command == "propose-validate":
+            proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
+            draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
+            bundles = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.evidence]
+            errors = validate_catalog_proposal(proposal, draft, bundles)
+            _write_json({"valid": not errors, "errors": errors})
+            return 0 if not errors else 1
+        if args.command == "catalog" and args.catalog_command == "review":
+            proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
+            current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None
+            errors = validate_landscape_catalog(proposal) + (validate_landscape_catalog(current) if current else [])
+            if errors:
+                raise ValueError("; ".join(errors))
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(render_catalog_review(proposal, current), encoding="utf-8")
+            return 0
 
         if args.command == "topology" and args.topology_command == "validate":
             topology = json.loads(Path(args.topology).read_text(encoding="utf-8"))
