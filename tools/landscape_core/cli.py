@@ -165,6 +165,7 @@ def build_parser():
     )
     catalog_review_parser.add_argument("proposal")
     catalog_review_parser.add_argument("--current")
+    catalog_review_parser.add_argument("--draft")
     catalog_review_parser.add_argument("--output", required=True)
 
     topology_parser = subparsers.add_parser(
@@ -321,7 +322,8 @@ def main(argv=None):
             if errors:
                 raise ValueError("; ".join(errors))
             Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-            Path(args.output).write_text(render_catalog_review(proposal, current), encoding="utf-8")
+            draft = json.loads(Path(args.draft).read_text(encoding="utf-8")) if args.draft else None
+            Path(args.output).write_text(render_catalog_review(proposal, current, draft), encoding="utf-8")
             return 0
 
         if args.command == "topology" and args.topology_command == "validate":

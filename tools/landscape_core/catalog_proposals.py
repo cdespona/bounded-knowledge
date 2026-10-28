@@ -148,9 +148,44 @@ def diff_catalog(proposal, current=None):
     }
 
 
-def render_catalog_review(proposal, current=None):
-    """Render a Markdown review of a proposal: the diff, then every assertion with its evidence."""
+_CONTENT_FIELDS = ("kind", "purpose", "description", "definition", "actor", "outcome", "type", "statement")
+
+
+def _describe_evidence(evidence, answers):
+    if evidence["kind"] == "repository":
+        lines = ":{}".format(evidence["lines"]) if "lines" in evidence else ""
+        return "repository `{}@{}` `{}{}`".format(evidence["repositoryId"], evidence["commit"][:8], evidence["path"], lines)
+    text = "{} `{}`".format(evidence["sourceType"], evidence["sourceId"])
+    if "suppliedBy" in evidence:
+        text += " by {}".format(evidence["suppliedBy"])
+    answer = answers.get(evidence["sourceId"])
+    if answer:
+        text += ': "{}"'.format(answer["text"].strip().replace("\n", " "))
+    return text
+
+
+def _render_entity(collection, item, answers):
+    heading = item.get("name") or item["id"]
+    lines = ["### {} (`{}`)".format(heading, item["id"]), ""]
+    if collection == "relationships":
+        lines.append("- {} -> {}".format(*("{} `{}`".format(item[end]["entityType"], item[end]["entityId"])
+                                             for end in ("source", "target"))))
+    for field in _CONTENT_FIELDS:
+        if field in item:
+            lines.append("- {}: {}".format(field, item[field]))
+    assessment = item["assessment"]
+    lines.append("- assessment: **{}**, {} confidence".format(assessment["status"], assessment["confidence"]))
+    for field in ("evidence", "counterevidence"):
+        lines.extend("  - {}: {}".format(field, _describe_evidence(entry, answers)) for entry in assessment[field])
+    lines.extend("  - missing: {}".format(entry) for entry in assessment.get("missingEvidence", []))
+    return lines + [""]
+
+
+def render_catalog_review(proposal, current=None, draft=None):
+    """Render a Markdown review of a proposal: the diff, then every assertion with its content and evidence."""
     diff = diff_catalog(proposal, current)
+    answers = {item["id"]: item["answer"] for item in (draft or {}).get("questions", [])
+               if item.get("answerStatus") == "answered"}
     lines = ["# Catalog proposal review", "",
              "Draft proposal only. Nothing here is canonical until a human approves it.", "",
              "## Diff against the current catalog", ""]
@@ -158,11 +193,9 @@ def render_catalog_review(proposal, current=None):
                        ("Open questions added", "openQuestionsAdded"), ("Open questions removed", "openQuestionsRemoved")):
         lines.append("- {}: {}".format(title, len(diff[key])))
         lines.extend("  - `{}`".format(item) for item in diff[key])
-    lines += ["", "## Assertions", ""]
-    for name, assessment in _assessments(proposal):
-        kinds = sorted({item["kind"] for item in assessment["evidence"]})
-        lines.append("- `{}` — {} ({} confidence); evidence: {}; counterevidence: {}".format(
-            name, assessment["status"], assessment["confidence"],
-            ", ".join(kinds) or "none", len(assessment["counterevidence"])))
-        lines.extend("  - missing: {}".format(item) for item in assessment.get("missingEvidence", []))
+    for collection in list(CATALOG_COLLECTION_TYPES) + ["relationships"]:
+        if proposal.get(collection):
+            lines += ["", "## {}".format(collection), ""]
+            for item in proposal[collection]:
+                lines.extend(_render_entity(collection, item, answers))
     return "\n".join(lines) + "\n"
