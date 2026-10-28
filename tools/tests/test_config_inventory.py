@@ -132,6 +132,12 @@ class ConfigInventoryTest(unittest.TestCase):
         for secret in ("hunter2", "s3cret", "123456789012"):
             self.assertNotIn(secret, text)
 
+    def test_withheld_resource_keys_surface_as_gaps_and_other_secrets_do_not(self):
+        gaps = [item for item in self.inventory["observations"]
+                if item["kind"] == "config-gap" and item["value"]["code"] == "withheld-config-value"]
+        self.assertEqual([(item["source"]["path"], item["source"]["lines"]) for item in gaps],
+                         [("src/main/resources/application-pro.yml", "4")])
+
     def test_validation_rejects_withheld_values_that_carry_text(self):
         inventory = copy.deepcopy(self.inventory)
         item = next(item for item in inventory["observations"]

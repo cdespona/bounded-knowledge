@@ -46,3 +46,26 @@ valid.
 Environment-specific values kept outside the repository (secrets, deployment config) are
 not visible and must come from the questionnaire. Spring multi-document YAML is reported
 as a gap after its first document.
+
+## Gaps for withheld bindings
+
+Detector version `2` also emits a `config-gap` with code `withheld-config-value` for every
+withheld key whose lexical resource hint is set (for example `spring.datasource.password`
+or `shop.jdbc.secret.id`). The gap reaches the evidence bundle, so the questionnaire
+curator can ask for the missing value as a human-only question.
+
+## Shared-resource relationships
+
+`landscape catalog link-config PROPOSAL --inventory INV... --evidence EV... --analyzed-at TS --output OUT`
+rebuilds every `application-shares-resource-with-application` relationship in a proposal
+from configuration alone, without a model.
+
+- Only `config-property` observations with resource `jdbc`, `kafka-topic`, or `sqs`, a
+  `literal` disposition, and a non-localhost value take part. Two repositories match when
+  they hold the exact same value, whatever the profile.
+- One relationship is emitted per application pair, with endpoints ordered by id. Its
+  status is `inferred` with `medium` confidence, its statement lists the shared values, and
+  its `missingEvidence` states that direction and runtime use are not established.
+- Evidence cites the matching configuration lines in each repository's evidence bundle.
+- The command removes previous relationships of this type first, so it is idempotent.
+- It never infers producer or consumer direction.

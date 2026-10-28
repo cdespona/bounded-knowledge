@@ -146,6 +146,7 @@ CATALOG_RELATIONSHIPS = {
         "application", "bounded-context"
     ),
     "application-supports-use-case": ("application", "use-case"),
+    "application-shares-resource-with-application": ("application", "application"),
     "bounded-context-defines-term": ("bounded-context", "term"),
     "application-contributes-to-strategic-capability": (
         "application", "strategic-capability"
@@ -1460,6 +1461,8 @@ def validate_landscape_catalog(document):
                     or (endpoint_type, endpoint_id) not in entities
                 ):
                     errors.append("{} references an unknown entity".format(endpoint_prefix))
+            if relationship_type == "application-shares-resource-with-application" and endpoints[0] >= endpoints[1]:
+                errors.append("{} must order two distinct applications by id".format(prefix))
             identity = (str(relationship_type),) + tuple(
                 (str(endpoint_type), str(endpoint_id))
                 for endpoint_type, endpoint_id in endpoints

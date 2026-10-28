@@ -14,6 +14,7 @@ from .contracts import (
 from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
+from .config_links import propose_shared_resource_relationships
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
@@ -160,6 +161,14 @@ def build_parser():
     catalog_propose_parser.add_argument("proposal")
     catalog_propose_parser.add_argument("--draft", required=True)
     catalog_propose_parser.add_argument("--evidence", required=True, nargs="+")
+    catalog_link_parser = catalog_subparsers.add_parser(
+        "link-config", help="add shared-resource relationships derived from configuration observations"
+    )
+    catalog_link_parser.add_argument("proposal")
+    catalog_link_parser.add_argument("--inventory", required=True, nargs="+")
+    catalog_link_parser.add_argument("--evidence", required=True, nargs="+")
+    catalog_link_parser.add_argument("--analyzed-at", required=True)
+    catalog_link_parser.add_argument("--output", required=True)
     catalog_review_parser = catalog_subparsers.add_parser(
         "review", help="render a Markdown review of a proposed catalog"
     )
@@ -315,6 +324,13 @@ def main(argv=None):
             errors = validate_catalog_proposal(proposal, draft, bundles)
             _write_json({"valid": not errors, "errors": errors})
             return 0 if not errors else 1
+        if args.command == "catalog" and args.catalog_command == "link-config":
+            proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
+            inventories = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.inventory]
+            bundles = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.evidence]
+            _write_json(propose_shared_resource_relationships(proposal, inventories, bundles, args.analyzed_at),
+                        output=args.output)
+            return 0
         if args.command == "catalog" and args.catalog_command == "review":
             proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
             current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None

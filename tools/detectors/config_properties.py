@@ -12,7 +12,7 @@ from landscape_core.safety import MAX_FILE_BYTES, directory_exclusion_reason, ex
 
 class ConfigPropertiesDetector:
     name = "config-properties"
-    version = 1
+    version = 2
 
     def _candidates(self, root):
         for current, directory_names, file_names in os.walk(root, topdown=True):
@@ -45,13 +45,20 @@ class ConfigPropertiesDetector:
             form = "properties" if relative.endswith(".properties") else "yaml"
             fallback = file_profile(relative)
             for entry in entries:
-                disposition, value = describe_value(entry["key"], entry["value"])
+                entry["disposition"], value = describe_value(entry["key"], entry["value"])
+                entry["resource"] = classify_resource(entry["key"], entry["value"])
+                disposition = entry["disposition"]
                 observations.append(observation(
                     kind="config-property", repository=repository, commit=commit,
                     detector=self.name, detector_version=self.version, source_path=relative,
                     value={"key": entry["key"], "profile": entry["profile"] or fallback, "form": form,
                            "line": entry["line"], "disposition": disposition, "value": value,
-                           "resource": classify_resource(entry["key"], entry["value"])}))
+                           "resource": entry["resource"]}))
+            for entry in entries:
+                if entry["disposition"] == "withheld" and entry["resource"] is not None:
+                    gaps.append({"line": entry["line"], "code": "withheld-config-value",
+                                 "detail": "The value of a {} configuration key is withheld by the privacy policy.".format(
+                                     entry["resource"])})
             for gap in gaps:
                 observations.append(observation(
                     kind="config-gap", repository=repository, commit=commit,
