@@ -231,7 +231,7 @@ class LandscapeTest(unittest.TestCase):
         )
         self.assertGreater(coverage["omittedPaths"], 0)
         self.assertEqual(
-            ["api-contract", "container-literal", "kafka-literal", "manifest", "repository-file"],
+            ["api-contract", "config-literal", "container-literal", "io-point", "kafka-literal", "manifest", "repository-file"],
             [item["category"] for item in coverage["byCategory"]],
         )
         self.assertIn(

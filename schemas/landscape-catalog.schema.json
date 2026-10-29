@@ -263,6 +263,8 @@
             "application-comprises-deployable",
             "application-participates-in-bounded-context",
             "application-supports-use-case",
+            "application-shares-resource-with-application",
+            "application-feeds-application",
             "bounded-context-defines-term",
             "application-contributes-to-strategic-capability"
           ]
@@ -297,6 +299,24 @@
             "properties": {
               "source": { "properties": { "entityType": { "const": "application" } } },
               "target": { "properties": { "entityType": { "const": "use-case" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "application-shares-resource-with-application" } } },
+          "then": {
+            "properties": {
+              "source": { "properties": { "entityType": { "const": "application" } } },
+              "target": { "properties": { "entityType": { "const": "application" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "application-feeds-application" } } },
+          "then": {
+            "properties": {
+              "source": { "properties": { "entityType": { "const": "application" } } },
+              "target": { "properties": { "entityType": { "const": "application" } } }
             }
           }
         },

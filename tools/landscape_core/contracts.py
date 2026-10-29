@@ -23,6 +23,24 @@ MANIFEST_KINDS = {
 }
 API_KINDS = {"api-document", "api-operation", "api-gap"}
 KAFKA_KINDS = {"kafka-topic-reference", "kafka-schema-reference", "kafka-gap"}
+CONFIG_KINDS = {"config-property", "config-gap"}
+CONFIG_FORMS = {"properties", "yaml"}
+CONFIG_DISPOSITIONS = {"literal", "placeholder", "withheld", "empty"}
+CONFIG_RESOURCES = {"jdbc", "sqs", "kafka", "kafka-topic", "schema-registry", "amqp"}
+ENV_KINDS = {"env-variable"}
+ENV_DISPOSITIONS = {"literal", "withheld", "reference", "empty"}
+ENV_RESOURCES = {"jdbc", "sqs", "s3", "kafka", "kafka-topic", "schema-registry", "amqp"}
+ENV_REFERENCES = {"secretKeyRef", "configMapKeyRef", "fieldRef", "resourceFieldRef", "other"}
+IO_KINDS = {"io-point", "io-gap"}
+IO_ROLES = {
+    "kafka": {"producer", "consumer"},
+    "sqs": {"producer", "consumer"},
+    "s3": {"producer", "consumer"},
+    "amqp": {"producer", "consumer"},
+    "messaging": {"producer", "consumer"},
+    "persistence": {"declaration", "reader", "writer", "mapped"},
+}
+IO_BINDING_FORMS = {"literal", "config-key", "channel", "placeholder", "type", "unresolved"}
 CONTAINER_KINDS = {
     "container-image-reference", "container-stage-reference", "container-gap"
 }
@@ -142,6 +160,8 @@ CATALOG_RELATIONSHIPS = {
         "application", "bounded-context"
     ),
     "application-supports-use-case": ("application", "use-case"),
+    "application-shares-resource-with-application": ("application", "application"),
+    "application-feeds-application": ("application", "application"),
     "bounded-context-defines-term": ("bounded-context", "term"),
     "application-contributes-to-strategic-capability": (
         "application", "strategic-capability"
@@ -393,6 +413,117 @@ def validate_api_observation(item, prefix="observation"):
 
     if "operationId" in value and not _is_non_empty_string(value["operationId"]):
         errors.append("{}.value.operationId must be a non-empty string".format(prefix))
+    return errors
+
+
+def validate_config_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for an application configuration observation."""
+    if not isinstance(item, dict):
+        return ["{} must be an object".format(prefix)]
+    kind = item.get("kind")
+    if not isinstance(kind, str) or kind not in CONFIG_KINDS:
+        return ["{}.kind is not a configuration observation kind".format(prefix)]
+    errors = validate_source_reference(item.get("source"), prefix + ".source", kind == "config-gap")
+    value = item.get("value")
+    if not isinstance(value, dict):
+        return errors + ["{}.value must be an object".format(prefix)]
+    if value.get("form") not in CONFIG_FORMS:
+        errors.append("{}.value.form is invalid".format(prefix))
+    if kind == "config-gap":
+        if not _exact_fields(value, {"form", "code", "detail"}):
+            errors.append("{}.value has invalid config-gap fields".format(prefix))
+        code = value.get("code")
+        if not isinstance(code, str) or not REPOSITORY_ID.fullmatch(code):
+            errors.append("{}.value.code must be lowercase kebab-case".format(prefix))
+        if not _is_non_empty_string(value.get("detail")):
+            errors.append("{}.value.detail must be a non-empty string".format(prefix))
+        return errors
+    if not _exact_fields(value, {"key", "profile", "form", "line", "disposition", "value", "resource"}):
+        return errors + ["{}.value has invalid config-property fields".format(prefix)]
+    if not _is_non_empty_string(value["key"]):
+        errors.append("{}.value.key must be a non-empty string".format(prefix))
+    if value["profile"] is not None and not _is_non_empty_string(value["profile"]):
+        errors.append("{}.value.profile must be null or a non-empty string".format(prefix))
+    if type(value["line"]) is not int or value["line"] < 1:
+        errors.append("{}.value.line must be a positive integer".format(prefix))
+    if value["disposition"] not in CONFIG_DISPOSITIONS:
+        errors.append("{}.value.disposition is invalid".format(prefix))
+    elif (value["value"] is None) != (value["disposition"] == "withheld"):
+        errors.append("{}.value.value must be null exactly when the disposition is withheld".format(prefix))
+    elif value["value"] is not None and not isinstance(value["value"], str):
+        errors.append("{}.value.value must be a string".format(prefix))
+    if value["resource"] is not None and value["resource"] not in CONFIG_RESOURCES:
+        errors.append("{}.value.resource is invalid".format(prefix))
+    return errors
+
+
+def validate_env_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for a container environment variable observation."""
+    if not isinstance(item, dict) or item.get("kind") not in ENV_KINDS:
+        return ["{}.kind is not an environment observation kind".format(prefix)]
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    fields = {"name", "container", "workload", "sourceSelectionId", "disposition", "value", "resource",
+              "reference", "valueLine"}
+    if not _exact_fields(value, fields):
+        return errors + ["{}.value has invalid env-variable fields".format(prefix)]
+    for field in ("name", "sourceSelectionId"):
+        if not _is_non_empty_string(value[field]):
+            errors.append("{}.value.{} must be a non-empty string".format(prefix, field))
+    for field in ("container", "workload"):
+        if not isinstance(value[field], str):
+            errors.append("{}.value.{} must be a string".format(prefix, field))
+    if value["disposition"] not in ENV_DISPOSITIONS:
+        errors.append("{}.value.disposition is invalid".format(prefix))
+    elif (value["value"] is None) != (value["disposition"] in {"withheld", "reference"}):
+        errors.append("{}.value.value must be null exactly when the value is withheld or a reference".format(prefix))
+    elif value["value"] is not None and not isinstance(value["value"], str):
+        errors.append("{}.value.value must be a string".format(prefix))
+    if value["resource"] not in ENV_RESOURCES:
+        errors.append("{}.value.resource is invalid".format(prefix))
+    if (value["reference"] is None) != (value["disposition"] != "reference") or (
+            value["reference"] is not None and value["reference"] not in ENV_REFERENCES):
+        errors.append("{}.value.reference is invalid for the disposition".format(prefix))
+    if type(value["valueLine"]) is not int or value["valueLine"] < 1:
+        errors.append("{}.value.valueLine must be a positive integer".format(prefix))
+    return errors
+
+
+def validate_io_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for a messaging or persistence I/O observation."""
+    if not isinstance(item, dict):
+        return ["{} must be an object".format(prefix)]
+    kind = item.get("kind")
+    if not isinstance(kind, str) or kind not in IO_KINDS:
+        return ["{}.kind is not an I/O observation kind".format(prefix)]
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    if kind == "io-gap":
+        if not _exact_fields(value, {"code", "detail"}):
+            return errors + ["{}.value has invalid io-gap fields".format(prefix)]
+        if not isinstance(value["code"], str) or not REPOSITORY_ID.fullmatch(value["code"]):
+            errors.append("{}.value.code must be lowercase kebab-case".format(prefix))
+        if not _is_non_empty_string(value["detail"]):
+            errors.append("{}.value.detail must be a non-empty string".format(prefix))
+        return errors
+    if not _exact_fields(value, {"technology", "role", "construct", "binding"}):
+        return errors + ["{}.value has invalid io-point fields".format(prefix)]
+    roles = IO_ROLES.get(value["technology"]) if isinstance(value["technology"], str) else None
+    if roles is None:
+        errors.append("{}.value.technology is invalid".format(prefix))
+    elif value["role"] not in roles:
+        errors.append("{}.value.role is invalid for the technology".format(prefix))
+    if not _is_non_empty_string(value["construct"]):
+        errors.append("{}.value.construct must be a non-empty string".format(prefix))
+    binding = value["binding"]
+    if not _exact_fields(binding, {"form", "reference", "via"}):
+        return errors + ["{}.value.binding has invalid fields".format(prefix)]
+    if binding["form"] not in IO_BINDING_FORMS:
+        errors.append("{}.value.binding.form is invalid".format(prefix))
+    if not _is_non_empty_string(binding["reference"]):
+        errors.append("{}.value.binding.reference must be a non-empty string".format(prefix))
+    if binding["via"] is not None and not _is_non_empty_string(binding["via"]):
+        errors.append("{}.value.binding.via must be null or a non-empty string".format(prefix))
     return errors
 
 
@@ -1415,6 +1546,10 @@ def validate_landscape_catalog(document):
                     or (endpoint_type, endpoint_id) not in entities
                 ):
                     errors.append("{} references an unknown entity".format(endpoint_prefix))
+            if relationship_type == "application-shares-resource-with-application" and endpoints[0] >= endpoints[1]:
+                errors.append("{} must order two distinct applications by id".format(prefix))
+            if relationship_type == "application-feeds-application" and endpoints[0] == endpoints[1]:
+                errors.append("{} must connect two distinct applications".format(prefix))
             identity = (str(relationship_type),) + tuple(
                 (str(endpoint_type), str(endpoint_id))
                 for endpoint_type, endpoint_id in endpoints

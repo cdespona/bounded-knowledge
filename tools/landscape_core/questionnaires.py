@@ -2,6 +2,7 @@
 
 import datetime
 import json
+from pathlib import Path
 import re
 
 from .candidates import extract_candidate_response
@@ -15,13 +16,14 @@ def extract_questionnaire_response(response):
     return draft
 
 
-def assemble_questionnaire(responses):
+def assemble_questionnaire(responses, return_batches=False):
     """Deterministically merge bounded batch responses into one validated draft.
 
     ``responses`` is a sequence of ``(label, text)`` pairs. Each text must hold exactly one
     complete draft-shaped JSON object (without an ``id``) that validates on its own, is
     entirely unanswered, and agrees with the other batches on respondent and scope pins.
     Any incomplete, conflicting, or duplicated input rejects the whole assembly.
+    With ``return_batches`` the result is ``(draft, [(label, extracted_batch), ...])``.
     """
     responses = list(responses)
     if not responses:
@@ -74,7 +76,28 @@ def assemble_questionnaire(responses):
     final_errors = validate_questionnaire_draft(draft)
     if final_errors:
         raise ValueError("assembled draft is invalid: {}".format("; ".join(final_errors)))
+    if return_batches:
+        return draft, [(label, batch) for label, batch in batches]
     return draft
+
+
+def plan_extracted_files(batches, directory):
+    """Return ``[(path, content)]`` for ``<input stem>.extracted.json`` files, writing nothing.
+
+    Rejects duplicate output names and existing files whose bytes would differ.
+    """
+    planned, owners = [], {}
+    for label, batch in batches:
+        name = Path(label).stem + ".extracted.json"
+        if name in owners:
+            raise ValueError("{} and {} would both write {}".format(owners[name], label, name))
+        owners[name] = label
+        target = Path(directory) / name
+        content = json.dumps(batch, indent=2, sort_keys=True) + "\n"
+        if target.exists() and (not target.is_file() or target.read_text(encoding="utf-8") != content):
+            raise ValueError("refusing to overwrite differing file: {}".format(target))
+        planned.append((target, content))
+    return planned
 
 
 def _link_keys(draft, review_type):

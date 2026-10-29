@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/env-observation.schema.json",
+  "title": "Container environment variable observation contract",
+  "type": "object",
+  "required": ["kind", "source", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "env-variable" },
+    "source": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+      }
+    },
+    "value": {
+      "type": "object",
+      "required": ["name", "container", "workload", "sourceSelectionId", "disposition", "value", "resource", "reference", "valueLine"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "container": { "type": "string" },
+        "workload": { "type": "string" },
+        "sourceSelectionId": { "type": "string", "minLength": 1 },
+        "disposition": { "enum": ["literal", "withheld", "reference", "empty"] },
+        "value": { "type": ["string", "null"] },
+        "resource": { "enum": ["jdbc", "sqs", "s3", "kafka", "kafka-topic", "schema-registry", "amqp"] },
+        "reference": { "enum": ["secretKeyRef", "configMapKeyRef", "fieldRef", "resourceFieldRef", "other", null] },
+        "valueLine": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

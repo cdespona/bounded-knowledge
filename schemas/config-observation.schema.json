@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/config-observation.schema.json",
+  "title": "Application configuration observation contract",
+  "type": "object",
+  "required": ["kind", "source", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "enum": ["config-property", "config-gap"] },
+    "source": {
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+      }
+    },
+    "value": { "oneOf": [{ "$ref": "#/$defs/property" }, { "$ref": "#/$defs/gap" }] }
+  },
+  "oneOf": [
+    { "properties": { "kind": { "const": "config-property" }, "value": { "$ref": "#/$defs/property" } } },
+    { "properties": { "kind": { "const": "config-gap" }, "value": { "$ref": "#/$defs/gap" }, "source": { "required": ["path", "lines"] } } }
+  ],
+  "$defs": {
+    "property": {
+      "type": "object",
+      "required": ["key", "profile", "form", "line", "disposition", "value", "resource"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "profile": { "type": ["string", "null"], "minLength": 1 },
+        "form": { "enum": ["properties", "yaml"] },
+        "line": { "type": "integer", "minimum": 1 },
+        "disposition": { "enum": ["literal", "placeholder", "withheld", "empty"] },
+        "value": { "type": ["string", "null"] },
+        "resource": { "enum": ["jdbc", "sqs", "kafka", "kafka-topic", "schema-registry", "amqp", null] }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "required": ["form", "code", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "form": { "enum": ["properties", "yaml"] },
+        "code": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

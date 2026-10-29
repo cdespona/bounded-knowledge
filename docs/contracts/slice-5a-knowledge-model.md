@@ -52,6 +52,8 @@ Kubernetes selection can bind to two valid catalog applications and deployables.
 | `application-comprises-deployable` | Application | Deployable |
 | `application-participates-in-bounded-context` | Application | Bounded context |
 | `application-supports-use-case` | Application | Use case |
+| `application-shares-resource-with-application` | Application | Application |
+| `application-feeds-application` | Application (upstream) | Application (downstream) |
 | `bounded-context-defines-term` | Bounded context | Term |
 | `application-contributes-to-strategic-capability` | Application | Strategic capability |
 

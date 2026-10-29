@@ -6,11 +6,17 @@ import re
 from .git_repository import commit_sha, require_repository_root
 from .contracts import (
     API_KINDS,
+    CONFIG_KINDS,
+    ENV_KINDS,
+    IO_KINDS,
     CONTAINER_KINDS,
     KAFKA_KINDS,
     MANIFEST_KINDS,
     TERRAFORM_KINDS,
     validate_api_observation,
+    validate_config_observation,
+    validate_env_observation,
+    validate_io_observation,
     validate_container_observation,
     validate_kafka_observation,
     validate_manifest_observation,
@@ -164,6 +170,12 @@ def validate_inventory(document, source=None):
             errors.extend(validate_api_observation(item, prefix))
         if item.get("kind") in KAFKA_KINDS:
             errors.extend(validate_kafka_observation(item, prefix))
+        if item.get("kind") in CONFIG_KINDS:
+            errors.extend(validate_config_observation(item, prefix))
+        elif item.get("kind") in IO_KINDS:
+            errors.extend(validate_io_observation(item, prefix))
+        elif item.get("kind") in ENV_KINDS:
+            errors.extend(validate_env_observation(item, prefix))
         if item.get("kind") in CONTAINER_KINDS:
             errors.extend(validate_container_observation(item, prefix))
             if (
