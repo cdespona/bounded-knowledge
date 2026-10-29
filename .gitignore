@@ -8,4 +8,7 @@ __pycache__/
 work/*
 !work/.gitkeep
 
+# Promoted catalog data stays local while this repository is public
+catalog/*
+
 graphify-out

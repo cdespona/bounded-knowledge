@@ -6,6 +6,10 @@
 `landscape-catalog.schema.json`), written only by `landscape catalog promote`. Promotion
 records live in `catalog/promotions/`. Models, scanners, and `link-config` never write there.
 
+The repository ignores `catalog/*`, so promoted data stays local and cannot be committed by
+accident while the repository is public. Remove that rule from `.gitignore` when the
+catalog is meant to be versioned.
+
 ## Flow
 
 1. `catalog propose-validate` must pass: schema, evidence bound to bundles, answers attributed,
