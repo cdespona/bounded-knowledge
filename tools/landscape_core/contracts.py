@@ -6,6 +6,9 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 import re
 
+from .config_files import mask_account_ids
+from .env_vars import looks_like_credential
+
 
 REPOSITORY_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 SHA = re.compile(r"^[a-f0-9]{40,64}$")
@@ -1210,6 +1213,34 @@ def validate_candidate_envelope(document, evidence_bundle=None):
     return errors
 
 
+def _validate_target_values(question, answer, prefix):
+    """Structured per-environment values accompany an answered question that expects them."""
+    expects = question.get("expects") == "target-values"
+    values = answer.get("values")
+    if not expects or question["answerStatus"] != "answered":
+        return [] if values is None else ["{}.answer.values is only allowed on an answered target-values question".format(prefix)]
+    if not isinstance(values, list) or not values:
+        return ["{}.answer.values must list the target per environment".format(prefix)]
+    errors, keys = [], []
+    for index, entry in enumerate(values):
+        entry_prefix = "{}.answer.values[{}]".format(prefix, index)
+        if not _exact_fields(entry, {"profile", "value"}):
+            errors.append("{} has invalid fields".format(entry_prefix)); continue
+        profile, value = entry["profile"], entry["value"]
+        if profile is not None and (not isinstance(profile, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", profile)):
+            errors.append("{}.profile must be null or lowercase kebab-case".format(entry_prefix))
+        if not _is_non_empty_string(value) or "\n" in value or value != value.strip():
+            errors.append("{}.value must be one trimmed line".format(entry_prefix))
+        elif looks_like_credential(value):
+            errors.append("{}.value looks like a credential and cannot be recorded".format(entry_prefix))
+        elif mask_account_ids(value) != value:
+            errors.append("{}.value must have AWS account ids masked".format(entry_prefix))
+        keys.append((profile or "", str(value)))
+    if keys != sorted(set(keys)):
+        errors.append("{}.answer.values must be sorted and unique".format(prefix))
+    return errors
+
+
 def validate_questionnaire_draft(document):
     """Validate an untrusted, respondent-specific draft Q&A artifact."""
     required = {"schemaVersion", "id", "respondent", "scope", "questions"}
@@ -1246,7 +1277,7 @@ def validate_questionnaire_draft(document):
     for index, item in enumerate(document["questions"] if isinstance(document["questions"], list) else []):
         prefix = "questions[{}]".format(index)
         required_item = {"id", "wording", "reviewType", "links", "whyCodeCannotSettle", "answerStatus"}
-        if not _exact_fields(item, required_item, {"answer"}):
+        if not _exact_fields(item, required_item, {"answer", "expects"}):
             errors.append("{} has invalid fields".format(prefix)); continue
         question_id = item.get("id")
         if not isinstance(question_id, str) or not REPOSITORY_ID.fullmatch(question_id):
@@ -1258,6 +1289,8 @@ def validate_questionnaire_draft(document):
             errors.append("{}.wording and whyCodeCannotSettle must be non-empty".format(prefix))
         if item.get("reviewType") not in {"code-answerable", "human-only"}:
             errors.append("{}.reviewType is invalid".format(prefix))
+        if "expects" in item and (item["expects"] != "target-values" or item.get("reviewType") != "human-only"):
+            errors.append("{}.expects must be target-values on a human-only question".format(prefix))
         allowed_statuses = ({"unanswered", "accepted", "rejected", "deferred"} if item.get("reviewType") == "code-answerable"
                             else {"unanswered", "answered", "unknown", "deferred"})
         if item.get("answerStatus") not in allowed_statuses:
@@ -1268,23 +1301,26 @@ def validate_questionnaire_draft(document):
         else:
             for link_index, link in enumerate(links):
                 link_prefix = "{}.links[{}]".format(prefix, link_index)
-                if not isinstance(link, dict) or link.get("type") not in {"claim", "gap"}:
+                if not isinstance(link, dict) or link.get("type") not in {"claim", "gap", "observation"}:
                     errors.append("{} is invalid".format(link_prefix)); continue
-                link_required = {"type", "repository", "commit", "evidenceBundleId"}
-                link_required.add("claimId" if link["type"] == "claim" else "gap")
+                target_field = {"claim": "claimId", "gap": "gap", "observation": "observationId"}[link["type"]]
+                link_required = {"type", "repository", "commit", "evidenceBundleId", target_field}
                 if not _exact_fields(link, link_required):
                     errors.append("{} has invalid fields".format(link_prefix))
                 elif (link["repository"], link["commit"], link["evidenceBundleId"]) not in scope_keys:
                     errors.append("{} is outside scope".format(link_prefix))
-                elif not _is_non_empty_string(link.get("claimId" if link["type"] == "claim" else "gap")):
+                elif not _is_non_empty_string(link.get(target_field)) or (
+                        link["type"] == "observation" and not SHA256.fullmatch(link["observationId"])):
                     errors.append("{} target is invalid".format(link_prefix))
         answer = item.get("answer")
         if item.get("answerStatus") == "unanswered":
             if answer is not None: errors.append("{}.answer is only allowed after a response".format(prefix))
-        elif not _exact_fields(answer, {"text", "answerer", "recordedAt"}) or not all(
+        elif not _exact_fields(answer, {"text", "answerer", "recordedAt"}, {"values"}) or not all(
             _is_non_empty_string(answer.get(field)) for field in ("text", "answerer")
         ) or not _is_datetime(answer.get("recordedAt")):
             errors.append("{}.answer must preserve text, answerer, and recordedAt".format(prefix))
+        else:
+            errors.extend(_validate_target_values(item, answer, prefix))
     if not isinstance(document["questions"], list) or not document["questions"]:
         errors.append("questions must be a non-empty array")
     return errors

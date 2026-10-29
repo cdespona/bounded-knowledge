@@ -78,6 +78,8 @@ def _feed_statement(match):
 
 def _feed_missing(matches, declared=frozenset()):
     missing = [FEED_MISSING]
+    if any(item.curated for match in matches for item in (match["producer"], match["consumer"])):
+        missing.append("A target value comes from an interview answer, not from code or configuration.")
     notes = {item.note for match in matches for item in (match["producer"], match["consumer"]) if item.note}
     if "queue name only" in notes:
         missing.append("SQS queues are compared by queue name only; region and account are not compared.")
@@ -94,7 +96,7 @@ def _unique(evidence):
     return list({tuple(sorted(item.items())): item for item in evidence if item is not None}.values())
 
 
-def propose_shared_resource_relationships(proposal, inventories, bundles, analyzed_at, topology=None):
+def propose_shared_resource_relationships(proposal, inventories, bundles, analyzed_at, topology=None, answers=None):
     """Return a copy of ``proposal`` whose derived application relationships are rebuilt from observations."""
     result = copy.deepcopy(proposal)
     application_by_repository = {}
@@ -112,7 +114,7 @@ def propose_shared_resource_relationships(proposal, inventories, bundles, analyz
     pairing = selection_pairs(topology, result) if topology else None
     declared = {selection for selection, (_, human) in (pairing or {}).items() if human}
     feeds = {}
-    for (producer, consumer), matches in sorted(feed_matches(inventories, pairing).items()):
+    for (producer, consumer), matches in sorted(feed_matches(inventories, pairing, answers).items()):
         pair = application_pair(producer, consumer)
         if pair is not None:
             feeds[pair] = matches
@@ -124,8 +126,9 @@ def propose_shared_resource_relationships(proposal, inventories, bundles, analyz
             for item in (match["producer"], match["consumer"]):
                 evidence.append(_evidence(bundles, item.point))
                 evidence.extend(_evidence(bundles, config) for config in item.config_items)
+                evidence.extend(item.curated)
         evidence = _unique(evidence)
-        cited = {item["observationId"] for item in evidence}
+        cited = {item["observationId"] for item in evidence if "observationId" in item}
         matches = [match for match in matches
                    if match["producer"].point["id"] in cited and match["consumer"].point["id"] in cited]
         if not matches:
@@ -157,7 +160,7 @@ def propose_shared_resource_relationships(proposal, inventories, bundles, analyz
                     [_evidence(bundles, item) for item in items if item["repository"] in {first, second}]))
     fed_tables = {(pair, match["identity"]) for pair, matches in feeds.items()
                   for match in matches if match["resource"] == "table"}
-    for (first, second), matches in sorted(table_shares(inventories, pairing).items()):
+    for (first, second), matches in sorted(table_shares(inventories, pairing, answers).items()):
         pair = application_pair(first, second)
         if pair is None:
             continue

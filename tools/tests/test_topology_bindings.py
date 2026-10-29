@@ -133,7 +133,7 @@ class PerEnvironmentNamesTest(unittest.TestCase):
         producer = Resolved(point("a", "producer"), "sqs-queue", {"dev": "dev-q", "pro": "pro-q"}, [])
         consumer = Resolved(point("b", "consumer"), "sqs-queue", {"dev": "dev-q", "pro": "pro-q"}, [])
         original = links.resolve_points
-        links.resolve_points = lambda inventories, pairing=None: [producer, consumer]
+        links.resolve_points = lambda inventories, pairing=None, draft=None: [producer, consumer]
         try:
             matches = feed_matches([], None)[("a", "b")]
         finally:

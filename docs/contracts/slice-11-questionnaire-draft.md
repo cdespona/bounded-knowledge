@@ -28,7 +28,7 @@ flowchart LR
 object; the view-only model must omit that field.
 
 One draft targets one respondent and carries pinned repository/evidence scope. Each item
-links to one or more candidate claim IDs or exact bundle-gap descriptions, allowing one
+links to one or more candidate claim IDs, exact bundle-gap descriptions, or (slice 16) observation ids, allowing one
 deduplicated question to cover several repositories. `human-only` items are
 respondent questions; `code-answerable` items remain visible audit work. Status is
 `unanswered`, `answered`, `unknown`, or `deferred`; every response preserves exact text,

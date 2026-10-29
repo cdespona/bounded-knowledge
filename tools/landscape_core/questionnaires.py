@@ -6,7 +6,14 @@ from pathlib import Path
 import re
 
 from .candidates import extract_candidate_response
+from .config_files import mask_account_ids
 from .contracts import artifact_id, validate_questionnaire_draft
+
+LINK_TARGETS = {"claim": "claimId", "gap": "gap", "observation": "observationId"}
+
+
+def link_target(link):
+    return link[LINK_TARGETS[link["type"]]]
 
 
 def extract_questionnaire_response(response):
@@ -132,9 +139,9 @@ def consolidate_questionnaire(original, response):
         for review_type in ("human-only", "code-answerable"):
             before, after = _link_keys(original, review_type), _link_keys(proposed, review_type)
             for key in sorted(before - after):
-                errors.append("{} link dropped: {}".format(review_type, dict(key).get("claimId", dict(key).get("gap"))))
+                errors.append("{} link dropped: {}".format(review_type, link_target(dict(key))))
             for key in sorted(after - before):
-                errors.append("{} link added: {}".format(review_type, dict(key).get("claimId", dict(key).get("gap"))))
+                errors.append("{} link added: {}".format(review_type, link_target(dict(key))))
             count = lambda draft: sum(1 for item in draft["questions"] if item["reviewType"] == review_type)
             if count(proposed) > count(original):
                 errors.append("{} questions increased".format(review_type))
@@ -157,8 +164,7 @@ def _applies_to(question):
     """Group a question's links by repository so a reader sees what it is about."""
     grouped = {}
     for link in question["links"]:
-        grouped.setdefault(link["repository"], []).append(
-            ("claim " + link["claimId"]) if link["type"] == "claim" else ("gap " + link["gap"]))
+        grouped.setdefault(link["repository"], []).append("{} {}".format(link["type"], link_target(link)))
     return [{"repository": repository, "targets": sorted(targets)} for repository, targets in sorted(grouped.items())]
 
 
@@ -173,8 +179,9 @@ def answers_template(draft, review_type="human-only"):
         "draftId": draft["id"],
         "reviewType": review_type,
         "answerer": "",
-        "answers": [{"questionId": item["id"], "wording": item["wording"], "appliesTo": _applies_to(item),
-                     "answerStatus": "unanswered", "text": ""}
+        "answers": [dict({"questionId": item["id"], "wording": item["wording"], "appliesTo": _applies_to(item),
+                          "answerStatus": "unanswered", "text": ""},
+                         **({"values": []} if item.get("expects") == "target-values" else {}))
                     for item in draft["questions"]
                     if item["reviewType"] == review_type and item["answerStatus"] == "unanswered"],
     }
@@ -201,7 +208,7 @@ def record_answers(draft, sheet, recorded_at=None):
     result, seen, problems = copy_draft(draft), set(), []
     updated = {item["id"]: item for item in result["questions"]}
     for entry in sheet["answers"]:
-        if not isinstance(entry, dict) or set(entry) - {"questionId", "wording", "appliesTo", "answerStatus", "text"}:
+        if not isinstance(entry, dict) or set(entry) - {"questionId", "wording", "appliesTo", "answerStatus", "text", "values"}:
             problems.append("answer entry has invalid fields"); continue
         question_id = entry.get("questionId")
         question = questions.get(question_id)
@@ -221,11 +228,20 @@ def record_answers(draft, sheet, recorded_at=None):
             problems.append("{} wording was changed".format(question_id))
         elif status not in ANSWER_STATUSES[question["reviewType"]]:
             problems.append("{} has invalid answerStatus".format(question_id))
-        elif not isinstance(entry.get("text"), str) or not entry["text"].strip():
-            problems.append("{} needs non-empty text (write e.g. 'I do not know' for unknown)".format(question_id))
         else:
+            values, problem = _normalized_values(question, status, entry)
+            text = entry.get("text")
+            if problem is None and values and (not isinstance(text, str) or not text.strip()):
+                text = "Target values: " + "; ".join("{} = {}".format(item["profile"] or "default", item["value"]) for item in values)
+            if problem is None and (not isinstance(text, str) or not text.strip()):
+                problem = "needs non-empty text (write e.g. 'I do not know' for unknown)"
+            if problem:
+                problems.append("{} {}".format(question_id, problem))
+                continue
             updated[question_id]["answerStatus"] = status
-            updated[question_id]["answer"] = {"text": entry["text"], "answerer": answerer.strip(), "recordedAt": recorded_at}
+            updated[question_id]["answer"] = {"text": text, "answerer": answerer.strip(), "recordedAt": recorded_at}
+            if values:
+                updated[question_id]["answer"]["values"] = values
     if problems:
         raise ValueError("; ".join(problems))
     result.pop("id")
@@ -234,6 +250,23 @@ def record_answers(draft, sheet, recorded_at=None):
     if final_errors:
         raise ValueError("recorded draft is invalid: {}".format("; ".join(final_errors)))
     return result
+
+
+def _normalized_values(question, status, entry):
+    """Return (sorted unique values with masked account ids, problem) for the values of one answer entry."""
+    raw = entry.get("values") or []
+    if question.get("expects") != "target-values" or status != "answered":
+        return [], ("does not take values" if raw else None)
+    if not isinstance(raw, list) or not raw:
+        return [], "needs a value per environment under 'Values:'"
+    values = set()
+    for item in raw:
+        if not isinstance(item, dict) or set(item) - {"profile", "value"} or not isinstance(item.get("value"), str):
+            return [], "has an invalid value entry"
+        profile = item.get("profile")
+        profile = None if profile in (None, "", "default") else str(profile).lower()
+        values.add((profile, mask_account_ids(item["value"].strip())))
+    return [{"profile": profile, "value": value} for profile, value in sorted(values, key=lambda pair: (pair[0] or "", pair[1]))], None
 
 
 def copy_draft(draft):
@@ -253,8 +286,11 @@ def answers_template_markdown(sheet):
         lines.extend(["", "## {}".format(entry["questionId"]), "", "> {}".format(" ".join(entry["wording"].split())), "",
                       "Applies to {} application(s):".format(len(entry["appliesTo"]))]
                      + ["- `{}` — {}".format(item["repository"], "; ".join(item["targets"])) for item in entry["appliesTo"]]
-                     + ["",
-                      "Status: {}".format(entry["answerStatus"]), "Answer:", "", entry["text"]])
+                     + ["", "Status: {}".format(entry["answerStatus"])]
+                     + (["Values (one `- environment: value` line each; `default` when it is the same everywhere):", "Values:", ""]
+                        + ["- {}: {}".format(item["profile"] or "default", item["value"]) for item in entry["values"]]
+                        + [""] if "values" in entry else [])
+                     + ["Answer:", "", entry["text"]])
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
@@ -273,10 +309,18 @@ def parse_answers_markdown(markdown):
         raise ValueError("answer sheet is missing the 'Draft:' line")
     answers, problems = [], []
     for question_id, body in zip(parts[1::2], parts[2::2]):
-        status, text, in_answer = None, [], False
+        status, text, in_answer, values, in_values = None, [], False, [], False
         for line in body.splitlines():
             if in_answer:
                 text.append(line)
+            elif line.startswith("Values:"):
+                in_values = True
+            elif in_values and line.startswith("- "):
+                match = re.match(r"^- ([A-Za-z0-9_.-]+):[ \t]+(\S.*)$", line)
+                if match is None:
+                    problems.append("{} has a malformed value line".format(question_id))
+                else:
+                    values.append({"profile": match.group(1), "value": match.group(2).strip()})
             elif line.startswith("Status:"):
                 status = line[len("Status:"):].strip()
             elif line.startswith("Answer:"):
@@ -288,7 +332,8 @@ def parse_answers_markdown(markdown):
         answer = "\n".join(text).strip("\n")
         if status == "unanswered" and answer.strip():
             problems.append("{} has answer text but status is unanswered".format(question_id)); continue
-        answers.append({"questionId": question_id, "answerStatus": status, "text": answer})
+        answers.append(dict({"questionId": question_id, "answerStatus": status, "text": answer},
+                            **({"values": values} if in_values else {})))
     if problems:
         raise ValueError("; ".join(problems))
     return {"draftId": header["Draft"], "answerer": header.get("Answerer", ""), "answers": answers}
@@ -310,7 +355,7 @@ def render_questionnaire(draft):
         for item in items:
             lines.extend(["### {} — {}".format(item["id"], item["answerStatus"]), "", item["wording"], ""])
             for link in item["links"]:
-                target = link.get("claimId", link.get("gap"))
+                target = link_target(link)
                 lines.append("- Linked {}: `{}` in `{}` at `{}`".format(link["type"], target, link["repository"], link["commit"]))
             lines.append("- Why code cannot settle it: {}".format(item["whyCodeCannotSettle"]))
             if "answer" in item:
