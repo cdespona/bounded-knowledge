@@ -15,7 +15,8 @@ from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
 from .config_links import propose_shared_resource_relationships
-from .topology_bindings import infer_bindings
+from .topology_bindings import infer_bindings, selection_pairs
+from .binding_questions import generate_binding_questions
 from .promotion import build_approval, promote, serialize
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
@@ -141,6 +142,16 @@ def build_parser():
     questionnaire_render_parser = questionnaire_subparsers.add_parser("render", help="render a validated draft as Markdown")
     questionnaire_render_parser.add_argument("draft")
     questionnaire_render_parser.add_argument("--output", required=True)
+    questionnaire_bindings_parser = questionnaire_subparsers.add_parser(
+        "bindings", help="generate questions for targets that code and configuration leave unresolved"
+    )
+    questionnaire_bindings_parser.add_argument("--inventory", required=True, nargs="+")
+    questionnaire_bindings_parser.add_argument("--evidence", required=True, nargs="+")
+    questionnaire_bindings_parser.add_argument("--topology")
+    questionnaire_bindings_parser.add_argument("--proposal", help="catalog proposal used to pair manifests through bindings")
+    questionnaire_bindings_parser.add_argument("--respondent-id", required=True)
+    questionnaire_bindings_parser.add_argument("--respondent-role", required=True)
+    questionnaire_bindings_parser.add_argument("--output", required=True)
 
     catalog_parser = subparsers.add_parser(
         "catalog", help="validate canonical landscape knowledge"
@@ -171,6 +182,7 @@ def build_parser():
     catalog_link_parser.add_argument("--evidence", required=True, nargs="+")
     catalog_link_parser.add_argument("--analyzed-at", required=True)
     catalog_link_parser.add_argument("--topology")
+    catalog_link_parser.add_argument("--answers", help="answered questionnaire draft with target values")
     catalog_link_parser.add_argument("--output", required=True)
     catalog_review_parser = catalog_subparsers.add_parser(
         "review", help="render a Markdown review of a proposed catalog"
@@ -333,6 +345,21 @@ def main(argv=None):
             sheet = parse_answers_markdown(raw) if Path(args.answers).suffix == ".md" else json.loads(raw)
             _write_json(record_answers(draft, sheet, args.recorded_at), output=args.output)
             return 0
+        if args.command == "questionnaire" and args.questionnaire_command == "bindings":
+            inventories = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.inventory]
+            bundles = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.evidence]
+            pairing = None
+            if args.topology and args.proposal:
+                pairing = selection_pairs(json.loads(Path(args.topology).read_text(encoding="utf-8")),
+                                          json.loads(Path(args.proposal).read_text(encoding="utf-8")))
+            draft, skipped = generate_binding_questions(
+                inventories, bundles, {"id": args.respondent_id, "role": args.respondent_role}, pairing)
+            if draft is None:
+                _write_json({"questions": 0, "skippedWithoutEvidence": skipped})
+                return 0
+            _write_json(draft, output=args.output)
+            _write_json({"questions": len(draft["questions"]), "skippedWithoutEvidence": skipped})
+            return 0
         if args.command == "questionnaire" and args.questionnaire_command == "render":
             Path(args.output).parent.mkdir(parents=True, exist_ok=True)
             Path(args.output).write_text(render_questionnaire(json.loads(Path(args.draft).read_text(encoding="utf-8"))), encoding="utf-8")
@@ -359,7 +386,12 @@ def main(argv=None):
             inventories = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.inventory]
             bundles = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.evidence]
             topology = json.loads(Path(args.topology).read_text(encoding="utf-8")) if args.topology else None
-            _write_json(propose_shared_resource_relationships(proposal, inventories, bundles, args.analyzed_at, topology),
+            answers = json.loads(Path(args.answers).read_text(encoding="utf-8")) if args.answers else None
+            if answers is not None:
+                errors = validate_questionnaire_draft(answers)
+                if errors:
+                    raise ValueError("answers draft is invalid: " + "; ".join(errors[:3]))
+            _write_json(propose_shared_resource_relationships(proposal, inventories, bundles, args.analyzed_at, topology, answers),
                         output=args.output)
             return 0
         if args.command == "catalog" and args.catalog_command == "review":

@@ -36,11 +36,16 @@ def classify_env(name, value):
     return None
 
 
+def looks_like_credential(value):
+    """Whether a value has the shape of an embedded credential (user:pass@host or password=...)."""
+    return _CREDENTIAL_VALUE.search(value) is not None
+
+
 def describe_env(name, value):
     """Return (disposition, stored value) for a literal value; secrets are never stored."""
     if not value:
         return "empty", ""
-    if SENSITIVE_KEY.search(name) or _CREDENTIAL_VALUE.search(value):
+    if SENSITIVE_KEY.search(name) or looks_like_credential(value):
         return "withheld", None
     return "literal", mask_account_ids(value)
 

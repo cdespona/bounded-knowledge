@@ -17,12 +17,13 @@ FLOW_ROLES = {"producer": "producer", "consumer": "consumer", "writer": "produce
 class Resolved:
     """An I/O point whose target was resolved to comparable identities per configuration profile."""
 
-    def __init__(self, point, resource, by_profile, config_items, note=None):
+    def __init__(self, point, resource, by_profile, config_items, note=None, curated=None):
         self.point = point
         self.resource = resource
         self.by_profile = by_profile
         self.config_items = config_items
         self.note = note
+        self.curated = curated or []
 
     @property
     def repository(self):
@@ -147,17 +148,56 @@ def _resolve(point, index, env):
     return None
 
 
-def resolve_points(inventories, pairing=None):
+def answered_targets(draft):
+    """Map an observation id to (question, answer) for answered questions that carry per-environment values."""
+    result = {}
+    for question in (draft or {}).get("questions", []):
+        if question.get("expects") == "target-values" and question["answerStatus"] == "answered":
+            for link in question["links"]:
+                if link["type"] == "observation":
+                    result[link["observationId"]] = (question, question["answer"])
+    return result
+
+
+def _answered(point, answers):
+    found = answers.get(point["id"])
+    resource = TECHNOLOGY_RESOURCES.get(point["value"]["technology"])
+    if found is None or resource is None:
+        return None
+    question, answer = found
+    by_profile = {entry["profile"]: _identity(resource, entry["value"]) for entry in answer["values"]}
+    curated = {"kind": "curated", "sourceId": question["id"], "sourceType": "interview",
+               "suppliedBy": answer["answerer"], "recordedAt": answer["recordedAt"]}
+    return Resolved(point, resource, by_profile, [], curated=[curated])
+
+
+def resolve_points(inventories, pairing=None, draft=None):
     resolved = []
     environment = _environment(inventories, pairing)
+    answers = answered_targets(draft)
     for inventory in inventories:
         index = _configuration(inventory)
         for item in inventory["observations"]:
             if item["kind"] == "io-point":
-                result = _resolve(item, index, environment.get(inventory["repository"], {}))
+                result = _resolve(item, index, environment.get(inventory["repository"], {})) or _answered(item, answers)
                 if result is not None:
                     resolved.append(result)
     return resolved
+
+
+def unresolved_points(inventories, pairing=None, draft=None):
+    """Messaging and storage points whose target neither code, configuration, manifests, nor an answer settles."""
+    environment = _environment(inventories, pairing)
+    answers = answered_targets(draft)
+    result = []
+    for inventory in inventories:
+        index = _configuration(inventory)
+        for item in inventory["observations"]:
+            value = item["value"] if item["kind"] == "io-point" else {}
+            if value.get("technology") in TECHNOLOGY_RESOURCES and value.get("role") in {"producer", "consumer"}:
+                if _resolve(item, index, environment.get(inventory["repository"], {})) is None and item["id"] not in answers:
+                    result.append(item)
+    return result
 
 
 def matching_profiles(first, second):
@@ -171,9 +211,9 @@ def matching_profiles(first, second):
     return matched
 
 
-def feed_matches(inventories, pairing=None):
+def feed_matches(inventories, pairing=None, draft=None):
     """Return {(producer repository, consumer repository): [match]} for producers paired with consumers."""
-    resolved = [item for item in resolve_points(inventories, pairing) if item.role in {"producer", "consumer", "writer", "reader"}]
+    resolved = [item for item in resolve_points(inventories, pairing, draft) if item.role in {"producer", "consumer", "writer", "reader"}]
     result = {}
     for producer in resolved:
         if FLOW_ROLES[producer.role] != "producer":
@@ -193,10 +233,10 @@ def feed_matches(inventories, pairing=None):
     return result
 
 
-def table_shares(inventories, pairing=None):
+def table_shares(inventories, pairing=None, draft=None):
     """Return {(repository, repository): [match]} for tables named by two repositories in any role."""
     by_table = {}
-    for item in resolve_points(inventories, pairing):
+    for item in resolve_points(inventories, pairing, draft):
         if item.resource == "table":
             by_table.setdefault(item.identity(None), []).append(item)
     result = {}
