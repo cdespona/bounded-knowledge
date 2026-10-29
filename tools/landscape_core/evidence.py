@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 
-from .config_files import is_config_path, mask_config_text
+from .config_files import is_config_path, mask_account_ids, mask_config_text
 from .contracts import artifact_id, validate_evidence_bundle
 from .git_repository import commit_sha, dirty_paths, require_repository_root
 from .safety import MAX_FILE_BYTES, copilot_configuration_files, exclusion_reason
@@ -16,7 +16,7 @@ MAX_RANGES_PER_FILE = 16
 MAX_LINES_PER_SELECTION = 200
 MAX_CONTENT_BYTES = 16 * 1024
 MAX_TOTAL_CONTENT_BYTES = 2 * 1024 * 1024
-GAP_KINDS = {"api-gap", "container-gap", "config-gap", "kafka-gap", "manifest-gap", "terraform-gap"}
+GAP_KINDS = {"api-gap", "container-gap", "config-gap", "io-gap", "kafka-gap", "manifest-gap", "terraform-gap"}
 
 
 def _candidate_category(observation_ids, observations_by_id):
@@ -28,6 +28,8 @@ def _candidate_category(observation_ids, observations_by_id):
         return "api-contract"
     if any(kind.startswith("kafka-") for kind in kinds):
         return "kafka-literal"
+    if any(kind.startswith("io-") for kind in kinds):
+        return "io-point"
     if any(kind.startswith("config-") for kind in kinds):
         return "config-literal"
     if any(kind.startswith("container-") for kind in kinds):
@@ -35,13 +37,13 @@ def _candidate_category(observation_ids, observations_by_id):
     return "repository-file"
 
 
-_CATEGORY_PRIORITY = {"manifest": 0, "api-contract": 1, "kafka-literal": 2, "config-literal": 3,
-                      "container-literal": 4, "repository-file": 5}
+_CATEGORY_PRIORITY = {"manifest": 0, "api-contract": 1, "kafka-literal": 2, "io-point": 3, "config-literal": 4,
+                      "container-literal": 5, "repository-file": 6}
 
-_SEMANTIC_PRIORITY = {"api-contract": 0, "kafka-literal": 1, "config-literal": 2, "entrypoint": 3,
-                      "port": 4, "schema-declaration": 5, "application-service": 6,
-                      "message": 7, "persistence": 8, "domain-type": 9,
-                      "mapper": 10, "outside-semantic-scope": 11}
+_SEMANTIC_PRIORITY = {"api-contract": 0, "kafka-literal": 1, "io-point": 2, "config-literal": 3, "entrypoint": 4,
+                      "port": 5, "schema-declaration": 6, "application-service": 7,
+                      "message": 8, "persistence": 9, "domain-type": 10,
+                      "mapper": 11, "outside-semantic-scope": 12}
 
 
 def _semantic_category(candidate):
@@ -51,7 +53,7 @@ def _semantic_category(candidate):
     name = path.stem.lower()
     if any(part in {"test", "tests", "fixture", "fixtures"} for part in parts):
         return "outside-semantic-scope"
-    if candidate["category"] in {"api-contract", "kafka-literal", "config-literal"}:
+    if candidate["category"] in {"api-contract", "kafka-literal", "io-point", "config-literal"}:
         return candidate["category"]
     main_source = any(parts[index:index + 2] == ("src", "main") for index in range(len(parts) - 1))
     if not main_source:
@@ -202,6 +204,7 @@ def select_evidence(inventory, source, purpose="general"):
         and isinstance(item.get("source"), dict)
         and item["source"].get("lines")
         and item.get("kind") not in GAP_KINDS
+        and not item.get("kind", "").startswith("io-")
     }
     candidates = {}
     whole_file_keys = set()
@@ -222,8 +225,8 @@ def select_evidence(inventory, source, purpose="general"):
         if item.get("kind", "").startswith("terraform-") and item.get("value", {}).get("evidenceDisposition") != "raw-text-safe":
             gaps.append({"code":"sensitive-value-withheld","detail":"Source text is withheld by the evidence privacy policy.","observationId":item["id"],"source":dict(source_ref)})
             continue
-        source_lines = source_ref.get("lines")
-        if source_lines is None and relative in precise_paths and not item["kind"].startswith("config-"):
+        source_lines = None if item["kind"].startswith("io-") else source_ref.get("lines")
+        if source_lines is None and relative in precise_paths and not item["kind"].startswith(("config-", "io-")):
             continue
         key = (relative, source_lines or "1-200")
         candidates.setdefault(key, []).append(item["id"])
@@ -313,6 +316,8 @@ def select_evidence(inventory, source, purpose="general"):
         end = min(end, len(lines))
         if is_config_path(relative):
             lines = mask_config_text("\n".join(lines), relative).split("\n")
+        else:
+            lines = mask_account_ids("\n".join(lines)).split("\n")
         content, actual_end, truncated = _bounded_content(lines, start, end)
         truncated = truncated or ((relative, requested_lines) in whole_file_keys and actual_end < len(lines))
         content_bytes = len(content.encode("utf-8"))

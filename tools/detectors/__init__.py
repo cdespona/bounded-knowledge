@@ -7,6 +7,7 @@ from .maven import MavenManifestDetector
 from .api_contract import ApiContractDetector
 from .config_properties import ConfigPropertiesDetector
 from .container_images import ContainerImageDetector
+from .io_points import IoPointsDetector
 from .kafka_literals import KafkaLiteralDetector
 from .kubernetes_images import KubernetesImageDetector
 from .terraform import TerraformDetector
@@ -24,5 +25,6 @@ def built_in_detectors(source_selection=None):
         ApiContractDetector(),
         KafkaLiteralDetector(),
         ConfigPropertiesDetector(),
+        IoPointsDetector(),
         ContainerImageDetector(),
     ]

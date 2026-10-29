@@ -27,6 +27,16 @@ CONFIG_KINDS = {"config-property", "config-gap"}
 CONFIG_FORMS = {"properties", "yaml"}
 CONFIG_DISPOSITIONS = {"literal", "placeholder", "withheld", "empty"}
 CONFIG_RESOURCES = {"jdbc", "sqs", "kafka", "kafka-topic", "schema-registry", "amqp"}
+IO_KINDS = {"io-point", "io-gap"}
+IO_ROLES = {
+    "kafka": {"producer", "consumer"},
+    "sqs": {"producer", "consumer"},
+    "s3": {"producer", "consumer"},
+    "amqp": {"producer", "consumer"},
+    "messaging": {"producer", "consumer"},
+    "persistence": {"declaration", "reader", "writer", "mapped"},
+}
+IO_BINDING_FORMS = {"literal", "config-key", "channel", "placeholder", "type", "unresolved"}
 CONTAINER_KINDS = {
     "container-image-reference", "container-stage-reference", "container-gap"
 }
@@ -147,6 +157,7 @@ CATALOG_RELATIONSHIPS = {
     ),
     "application-supports-use-case": ("application", "use-case"),
     "application-shares-resource-with-application": ("application", "application"),
+    "application-feeds-application": ("application", "application"),
     "bounded-context-defines-term": ("bounded-context", "term"),
     "application-contributes-to-strategic-capability": (
         "application", "strategic-capability"
@@ -439,6 +450,44 @@ def validate_config_observation(item, prefix="observation"):
         errors.append("{}.value.value must be a string".format(prefix))
     if value["resource"] is not None and value["resource"] not in CONFIG_RESOURCES:
         errors.append("{}.value.resource is invalid".format(prefix))
+    return errors
+
+
+def validate_io_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for a messaging or persistence I/O observation."""
+    if not isinstance(item, dict):
+        return ["{} must be an object".format(prefix)]
+    kind = item.get("kind")
+    if not isinstance(kind, str) or kind not in IO_KINDS:
+        return ["{}.kind is not an I/O observation kind".format(prefix)]
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    if kind == "io-gap":
+        if not _exact_fields(value, {"code", "detail"}):
+            return errors + ["{}.value has invalid io-gap fields".format(prefix)]
+        if not isinstance(value["code"], str) or not REPOSITORY_ID.fullmatch(value["code"]):
+            errors.append("{}.value.code must be lowercase kebab-case".format(prefix))
+        if not _is_non_empty_string(value["detail"]):
+            errors.append("{}.value.detail must be a non-empty string".format(prefix))
+        return errors
+    if not _exact_fields(value, {"technology", "role", "construct", "binding"}):
+        return errors + ["{}.value has invalid io-point fields".format(prefix)]
+    roles = IO_ROLES.get(value["technology"]) if isinstance(value["technology"], str) else None
+    if roles is None:
+        errors.append("{}.value.technology is invalid".format(prefix))
+    elif value["role"] not in roles:
+        errors.append("{}.value.role is invalid for the technology".format(prefix))
+    if not _is_non_empty_string(value["construct"]):
+        errors.append("{}.value.construct must be a non-empty string".format(prefix))
+    binding = value["binding"]
+    if not _exact_fields(binding, {"form", "reference", "via"}):
+        return errors + ["{}.value.binding has invalid fields".format(prefix)]
+    if binding["form"] not in IO_BINDING_FORMS:
+        errors.append("{}.value.binding.form is invalid".format(prefix))
+    if not _is_non_empty_string(binding["reference"]):
+        errors.append("{}.value.binding.reference must be a non-empty string".format(prefix))
+    if binding["via"] is not None and not _is_non_empty_string(binding["via"]):
+        errors.append("{}.value.binding.via must be null or a non-empty string".format(prefix))
     return errors
 
 
@@ -1463,6 +1512,8 @@ def validate_landscape_catalog(document):
                     errors.append("{} references an unknown entity".format(endpoint_prefix))
             if relationship_type == "application-shares-resource-with-application" and endpoints[0] >= endpoints[1]:
                 errors.append("{} must order two distinct applications by id".format(prefix))
+            if relationship_type == "application-feeds-application" and endpoints[0] == endpoints[1]:
+                errors.append("{} must connect two distinct applications".format(prefix))
             identity = (str(relationship_type),) + tuple(
                 (str(endpoint_type), str(endpoint_id))
                 for endpoint_type, endpoint_id in endpoints

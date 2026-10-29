@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/io-observation.schema.json",
+  "title": "Messaging and persistence I/O observation contract",
+  "type": "object",
+  "required": ["kind", "source", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "enum": ["io-point", "io-gap"] },
+    "source": {
+      "type": "object",
+      "required": ["path", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lines": { "type": "string", "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$" }
+      }
+    },
+    "value": { "oneOf": [{ "$ref": "#/$defs/point" }, { "$ref": "#/$defs/gap" }] }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": ["technology", "role", "construct", "binding"],
+      "additionalProperties": false,
+      "properties": {
+        "technology": { "enum": ["kafka", "sqs", "s3", "amqp", "messaging", "persistence"] },
+        "role": { "enum": ["producer", "consumer", "declaration", "reader", "writer", "mapped"] },
+        "construct": { "type": "string", "minLength": 1 },
+        "binding": {
+          "type": "object",
+          "required": ["form", "reference", "via"],
+          "additionalProperties": false,
+          "properties": {
+            "form": { "enum": ["literal", "config-key", "channel", "placeholder", "type", "unresolved"] },
+            "reference": { "type": "string", "minLength": 1 },
+            "via": { "type": ["string", "null"], "minLength": 1 }
+          }
+        }
+      }
+    },
+    "gap": {
+      "type": "object",
+      "required": ["code", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

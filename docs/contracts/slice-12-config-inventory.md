@@ -68,4 +68,6 @@ from configuration alone, without a model.
   its `missingEvidence` states that direction and runtime use are not established.
 - Evidence cites the matching configuration lines in each repository's evidence bundle.
 - The command removes previous relationships of this type first, so it is idempotent.
-- It never infers producer or consumer direction.
+- Direction comes only from I/O points (slice 13). A configuration-only match never implies it.
+- A kafka-topic or sqs value match is dropped for an application pair that already has an
+  `application-feeds-application` relationship, because the feed states the same fact with direction.
