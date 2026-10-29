@@ -148,4 +148,4 @@ an invalid stable ID, a confirmed assertion without evidence, an unknown asserti
 
 Slice 5A provides the portable canonical shape and standalone operational validation.
 Candidate formats, evidence-bundle binding, human-review diffs, and single-writer promotion
-remain separate later work.
+are defined by later slices (promotion in slice 15).
