@@ -15,6 +15,7 @@ from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
 from .config_links import propose_shared_resource_relationships
+from .topology_bindings import infer_bindings
 from .promotion import build_approval, promote, serialize
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
@@ -169,6 +170,7 @@ def build_parser():
     catalog_link_parser.add_argument("--inventory", required=True, nargs="+")
     catalog_link_parser.add_argument("--evidence", required=True, nargs="+")
     catalog_link_parser.add_argument("--analyzed-at", required=True)
+    catalog_link_parser.add_argument("--topology")
     catalog_link_parser.add_argument("--output", required=True)
     catalog_review_parser = catalog_subparsers.add_parser(
         "review", help="render a Markdown review of a proposed catalog"
@@ -211,6 +213,12 @@ def build_parser():
     topology_validate_parser.add_argument("topology")
     topology_validate_parser.add_argument("--sources", required=True)
     topology_validate_parser.add_argument("--catalog", required=True)
+    topology_infer_parser = topology_subparsers.add_parser(
+        "infer-bindings", help="propose folder-convention bindings for unbound selections"
+    )
+    topology_infer_parser.add_argument("topology")
+    topology_infer_parser.add_argument("--catalog", required=True)
+    topology_infer_parser.add_argument("--output", required=True)
     return parser
 
 
@@ -350,7 +358,8 @@ def main(argv=None):
             proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
             inventories = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.inventory]
             bundles = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.evidence]
-            _write_json(propose_shared_resource_relationships(proposal, inventories, bundles, args.analyzed_at),
+            topology = json.loads(Path(args.topology).read_text(encoding="utf-8")) if args.topology else None
+            _write_json(propose_shared_resource_relationships(proposal, inventories, bundles, args.analyzed_at, topology),
                         output=args.output)
             return 0
         if args.command == "catalog" and args.catalog_command == "review":
@@ -380,6 +389,18 @@ def main(argv=None):
             _write_json(promote(proposal, draft, bundles, approval, Path(args.catalog), Path(args.promotions), args.dry_run))
             return 0
 
+        if args.command == "topology" and args.topology_command == "infer-bindings":
+            topology = json.loads(Path(args.topology).read_text(encoding="utf-8"))
+            catalog = json.loads(Path(args.catalog).read_text(encoding="utf-8"))
+            errors = validate_landscape_catalog(catalog)
+            if errors:
+                raise ValueError("; ".join(errors))
+            result = infer_bindings(topology, catalog)
+            errors = validate_source_topology(result, None, catalog)
+            if errors:
+                raise ValueError("; ".join(errors))
+            _write_json(result, output=args.output)
+            return 0
         if args.command == "topology" and args.topology_command == "validate":
             topology = json.loads(Path(args.topology).read_text(encoding="utf-8"))
             sources = json.loads(Path(args.sources).read_text(encoding="utf-8"))

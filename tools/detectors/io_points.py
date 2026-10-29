@@ -31,9 +31,16 @@ _DATA_CLASS = re.compile(r"\bdata\s+class\s+(\w+)\s*\(")
 _METHOD = re.compile(
     r"\b(\w+)\s*\(([^()]*)\)\s*(?:throws\s+[\w.,\s]+)?(?::\s*[\w.<>?,\s]+)?\{")
 _NOT_METHODS = {"if", "for", "while", "switch", "catch", "synchronized", "return", "when", "try", "else"}
+_CONFIG_CALL = (r'(?:System\.getenv|getenv|(?:[\w.]+\.)?getProperty|(?:[\w.()]+\.)?getOptionalValue|'
+                r'(?:[\w.()]+\.)?getValue)')
+_CONFIG_READ = re.compile(r'^(?:Optional\.ofNullable\(\s*|Objects\.requireNonNullElse\(\s*)?' + _CONFIG_CALL + r'\(\s*"([^"]+)"')
+_ASSIGNMENT = re.compile(r'\b(\w+)\s*=\s*(?:this\.)?((?:Optional\.ofNullable\(\s*|Objects\.requireNonNullElse\(\s*)?'
+                         + _CONFIG_CALL + r'\(\s*"[^"]+")')
+_CONFIGURATION_PROPERTIES = re.compile(r'^(?:prefix\s*=\s*|value\s*=\s*)?"([^"]+)"$')
+_FIELD = re.compile(r'(?:private|protected|public)?\s*(?:final\s+)?[\w.<>\[\], ?]+\s+(\w+)\s*(?:=[^;]*)?;')
 _STRING = re.compile(r'^"((?:[^"\\\n]|\\.)*)"$')
 _PLACEHOLDER = re.compile(r"^\$\{([^}:]+)(?::.*)?\}$")
-_ACCESSOR = re.compile(r"^(?:[\w.]+\.)?(\w+)\(\)$")
+_ACCESSOR = re.compile(r"^(?:[\w.()]+\.)?(?:get)?(\w+)\(\)$|^[A-Za-z_][\w.]*\.(\w+)$")
 _IDENTIFIER = re.compile(r"^(?:this\.)?(\w+)$")
 _TABLE = r'(?:\$\w+\$|\$\{[^}]+\}|%s|[A-Za-z_][\w$#.\"`]*)'
 _WRITES = (
@@ -109,6 +116,10 @@ class _Source:
         for match in _ALIAS.finditer(self.code):
             if match.group(2) in self.names:
                 self.names.setdefault(match.group(1), self.names[match.group(2)])
+        for match in _ASSIGNMENT.finditer(self.clean):
+            read = _CONFIG_READ.match(match.group(2))
+            if read:
+                self.names.setdefault(match.group(1), read.group(1))
         self.constants = {match.group(1): match.group(2) for match in _CONSTANT.finditer(self.clean)}
         self.methods = []
         for match in _METHOD.finditer(self.code):
@@ -118,6 +129,16 @@ class _Source:
             end = group_end(self.code, brace)
             if end > 0:
                 self.methods.append((match.group(1), self.parameters(match.group(2)), brace, end))
+        self.field_parameters = self._field_parameters()
+
+    def _field_parameters(self):
+        """Map a field to the (constructor name, parameter index) that assigns it from a parameter."""
+        result = {}
+        for name, parameters, brace, end in self.methods:
+            for match in re.finditer(r"\bthis\.(\w+)\s*=\s*(\w+)\s*;", self.code[brace:end]):
+                if match.group(2) in parameters:
+                    result[match.group(1)] = (name, parameters.index(match.group(2)))
+        return result
 
     @staticmethod
     def parameters(text):
@@ -148,7 +169,7 @@ class _Source:
 
 class IoPointsDetector:
     name = "io-points"
-    version = 1
+    version = 2
 
     def _candidates(self, root):
         for current, directory_names, file_names in os.walk(root, topdown=True):
@@ -177,6 +198,8 @@ class IoPointsDetector:
                 sources.append(_Source(relative, path.read_text(encoding="utf-8")))
             except (OSError, UnicodeError):
                 continue
+        self._environment_helpers(sources)
+        self._providers = self._provider_methods(sources)
         records = self._record_components(sources)
         points, gaps = {}, {}
         wrappers = {}
@@ -198,6 +221,33 @@ class IoPointsDetector:
                 value={"code": code, "detail": detail}))
         return observations, []
 
+    @staticmethod
+    def _provider_methods(sources):
+        """Map parameterless methods that return a configuration read to its key; ambiguous names are dropped."""
+        found, ambiguous = {}, set()
+        for source in sources:
+            for name, parameters, brace, end in source.methods:
+                read = re.match(r"\{\s*return\s+(.*?);", source.clean[brace:end + 1], re.DOTALL)
+                match = _CONFIG_READ.match(read.group(1).strip()) if read and not parameters else None
+                if match:
+                    if found.setdefault(name, match.group(1)) != match.group(1):
+                        ambiguous.add(name)
+        return {name: key for name, key in found.items() if name not in ambiguous}
+
+    @staticmethod
+    def _environment_helpers(sources):
+        """Bind variables assigned from helper methods that read an environment variable named by their argument."""
+        helpers = set()
+        for source in sources:
+            for name, parameters, brace, end in source.methods:
+                read = re.search(r"System\.getenv\(\s*(\w+)\s*\)", source.clean[brace:end])
+                if read and read.group(1) in parameters:
+                    helpers.add(name)
+        for source in sources:
+            for helper in sorted(helpers):
+                for match in re.finditer(r'\b(\w+)\s*=\s*(?:\w+\.)?' + re.escape(helper) + r'\(\s*"([^"]+)"', source.clean):
+                    source.names.setdefault(match.group(1), match.group(2))
+
     # -- records: constructor arguments bound to configuration keys ------------------------------------------
 
     def _record_components(self, sources):
@@ -210,6 +260,23 @@ class IoPointsDetector:
                         declared[match.group(1)] = source.parameters(", ".join(arguments))
         bound = {}
         for source in sources:
+            for kind, name, offset, attached in declarations(source.code, source.found):
+                prefix = None
+                for annotation in attached:
+                    if annotation.name == "ConfigurationProperties" and annotation.open_index is not None:
+                        arguments, _ = source.arguments(annotation.open_index)
+                        match = _CONFIGURATION_PROPERTIES.match(arguments[0]) if arguments else None
+                        if match:
+                            prefix = match.group(1)
+                if prefix is None:
+                    continue
+                brace = source.code.find("{", offset)
+                end = group_end(source.code, brace) if brace >= 0 else -1
+                fields = set(declared.get(name, []))
+                if end > 0:
+                    fields |= {match.group(1) for match in _FIELD.finditer(source.code[brace:end])}
+                for field in fields:
+                    bound.setdefault((name + "@properties", field), set()).add(prefix + "." + field)
             for name, components in declared.items():
                 for match in re.finditer(r"\b(?:new\s+)?" + re.escape(name) + r"\s*\(", source.code):
                     arguments, _ = source.arguments(match.end() - 1)
@@ -243,14 +310,24 @@ class IoPointsDetector:
                 return _binding("config-key", source.names[name], "parameter {}".format(name))
             if name in source.constants:
                 return _binding("literal", source.constants[name], "constant {}".format(name))
+            if name in self._providers:
+                return _binding("config-key", self._providers[name], "provider method {}() matched by name".format(name))
             return _binding("unresolved", name, "identifier")
+        read = _CONFIG_READ.match(argument)
+        if read:
+            return _binding("config-key", read.group(1), "configuration read")
         match = _ACCESSOR.match(argument)
-        if match and match.group(1) in records:
-            owners = records[match.group(1)]
-            keys = {key for keys in owners.values() for key in keys}
-            if len(keys) == 1:
-                return _binding("config-key", next(iter(keys)),
-                                "record {}.{}".format(sorted(owners)[0], match.group(1)))
+        if match:
+            name = match.group(1) or match.group(2)
+            for candidate in (name, name[:1].lower() + name[1:]):
+                if candidate in records:
+                    owners = records[candidate]
+                    keys = {key for keys in owners.values() for key in keys}
+                    if len(keys) == 1:
+                        owner = sorted(owners)[0]
+                        kind = "configuration class" if owner.endswith("@properties") else "record"
+                        return _binding("config-key", next(iter(keys)),
+                                        "{} {}.{}".format(kind, owner.replace("@properties", ""), candidate))
         return _binding("unresolved", _compact(argument), "expression")
 
     # -- per-file scanning ------------------------------------------------------------------------------------
@@ -277,6 +354,9 @@ class IoPointsDetector:
                     if method is not None and binding["reference"] in method[1]:
                         wrappers.setdefault(method[0], set()).add(
                             (method[1].index(binding["reference"]), technology, role, construct))
+                    elif binding["reference"] in source.field_parameters:
+                        owner, index = source.field_parameters[binding["reference"]]
+                        wrappers.setdefault(owner, set()).add((index, technology, role, construct))
 
         text = source.clean
         self._messaging_channels(source, text, point, bind_each)
@@ -367,6 +447,9 @@ class IoPointsDetector:
                     if arguments and not re.match(r"^(?:new\s+)?\w*Request\b", arguments[0]):
                         role = "producer" if match.group(1) in _SQS_PRODUCERS else "consumer"
                         bind_each(match.start(), close + 1, "sqs", role, "SqsClient." + match.group(1), arguments[0])
+            for match in re.finditer(r"\bnew\s+(SendMessage|SendMessageBatch|ReceiveMessage|DeleteMessage|DeleteMessageBatch)Request\s*\(\s*\)",
+                                     source.code):
+                self._queue_url(source, match.start(), statement_end(source.code, match.start()), match.group(1), bind_each)
             for match in _SQS_V1.finditer(source.code):
                 arguments, close = source.arguments(match.end() - 1)
                 if arguments and "com.amazonaws.services.sqs" in text:
@@ -388,7 +471,7 @@ class IoPointsDetector:
 
     def _queue_url(self, source, start, end, kind, bind_each):
         role = "producer" if kind in _SQS_PRODUCERS else "consumer"
-        for match in re.finditer(r"\.queueUrl\s*\(", source.code[start:end]):
+        for match in re.finditer(r"\.(?:queueUrl|withQueueUrl)\s*\(", source.code[start:end]):
             open_index = start + match.end() - 1
             arguments, close = source.arguments(open_index)
             if arguments:
@@ -594,6 +677,8 @@ class IoPointsDetector:
                         if index >= len(arguments):
                             continue
                         binding = self._bind(source, arguments[index], records)
+                        if binding["form"] == "unresolved":
+                            continue
                         first = source.line(match.start())
                         last = source.line(max(match.start(), close))
                         points[(source.relative, first, last, role, technology, construct + " via " + name,

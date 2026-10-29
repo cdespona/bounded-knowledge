@@ -4,6 +4,7 @@ import copy
 
 from .catalog_proposals import canonicalize_catalog_proposal
 from .io_links import feed_matches, table_shares
+from .topology_bindings import selection_pairs
 
 SHARE_TYPE = "application-shares-resource-with-application"
 FEED_TYPE = "application-feeds-application"
@@ -75,17 +76,17 @@ def _feed_statement(match):
     return "{} {} `{}` (profiles: {})".format(verbs[0], match["resource"], match["identity"], _profiles(match["profiles"]))
 
 
-def _feed_missing(matches):
+def _feed_missing(matches, declared=frozenset()):
     missing = [FEED_MISSING]
     notes = {item.note for match in matches for item in (match["producer"], match["consumer"]) if item.note}
     if "queue name only" in notes:
         missing.append("SQS queues are compared by queue name only; region and account are not compared.")
     if "channel name used as the topic" in notes:
         missing.append("A messaging channel without a configured topic is read as using the channel name as the topic.")
-    if any(config["kind"] == "env-variable" for match in matches for item in (match["producer"], match["consumer"])
-           for config in item.config_items):
-        missing.append("Environment values come from the Kubernetes manifests folder named after the repository; "
-                       "that pairing is a folder convention.")
+    if any(config["kind"] == "env-variable" and config["value"]["sourceSelectionId"] not in declared
+           for match in matches for item in (match["producer"], match["consumer"]) for config in item.config_items):
+        missing.append("Environment values come from Kubernetes manifests paired with the repository by folder "
+                       "convention, not by a declared binding.")
     return missing
 
 
@@ -93,7 +94,7 @@ def _unique(evidence):
     return list({tuple(sorted(item.items())): item for item in evidence if item is not None}.values())
 
 
-def propose_shared_resource_relationships(proposal, inventories, bundles, analyzed_at):
+def propose_shared_resource_relationships(proposal, inventories, bundles, analyzed_at, topology=None):
     """Return a copy of ``proposal`` whose derived application relationships are rebuilt from observations."""
     result = copy.deepcopy(proposal)
     application_by_repository = {}
@@ -108,8 +109,10 @@ def propose_shared_resource_relationships(proposal, inventories, bundles, analyz
             return application_by_repository[first], application_by_repository[second]
         return None
 
+    pairing = selection_pairs(topology, result) if topology else None
+    declared = {selection for selection, (_, human) in (pairing or {}).items() if human}
     feeds = {}
-    for (producer, consumer), matches in sorted(feed_matches(inventories).items()):
+    for (producer, consumer), matches in sorted(feed_matches(inventories, pairing).items()):
         pair = application_pair(producer, consumer)
         if pair is not None:
             feeds[pair] = matches
@@ -137,7 +140,7 @@ def propose_shared_resource_relationships(proposal, inventories, bundles, analyz
                 "; ".join(sorted(set(statements)))),
             "assessment": {"status": "inferred", "confidence": "medium", "analyzedAt": analyzed_at,
                            "evidence": evidence, "counterevidence": [],
-                           "missingEvidence": _feed_missing(matches)},
+                           "missingEvidence": _feed_missing(matches, declared)},
         })
 
     shares = {}
@@ -154,7 +157,7 @@ def propose_shared_resource_relationships(proposal, inventories, bundles, analyz
                     [_evidence(bundles, item) for item in items if item["repository"] in {first, second}]))
     fed_tables = {(pair, match["identity"]) for pair, matches in feeds.items()
                   for match in matches if match["resource"] == "table"}
-    for (first, second), matches in sorted(table_shares(inventories).items()):
+    for (first, second), matches in sorted(table_shares(inventories, pairing).items()):
         pair = application_pair(first, second)
         if pair is None:
             continue

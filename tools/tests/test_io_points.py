@@ -217,6 +217,83 @@ class IoPointDetectorTest(unittest.TestCase):
         self.assertFalse(self.find("persistence", "reader", reference="o.at"))
 
 
+COVERAGE = """package com.example;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.streams.StreamsBuilder;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.sqs.SqsClient;
+@ConfigurationProperties(prefix = "kafka.topics")
+class TopicProperties {
+    private String styleColor;
+    String getStyleColor() { return styleColor; }
+}
+class Reader {
+    final TopicProperties properties;
+    final String bucket;
+    Reader(TopicProperties properties, String bucket) { this.properties = properties; this.bucket = bucket; }
+    void put() { PutObjectRequest.builder().bucket(bucket).build(); }
+    void read(StreamsBuilder streamsBuilder) { streamsBuilder.table(properties.getStyleColor()); }
+}
+class Wiring {
+    static final String OUT = System.getenv("OUT_BUCKET");
+    static final String TOPIC = envOr("DERIVED_QUEUE", "d");
+    void wire() { new Reader(null, OUT); }
+    void send() { new ProducerRecord<String, String>(TOPIC, "k", "v"); }
+    static String envOr(String key, String fallback) { return System.getenv(key) == null ? fallback : System.getenv(key); }
+}
+class Beans {
+    public String sitemapBucket() { return System.getenv("SITEMAP_BUCKET"); }
+}
+class Sitemap {
+    String sitemapBucket;
+    void get() { GetObjectRequest.builder().bucket(sitemapBucket).build(); }
+    void direct() { GetObjectRequest.builder().bucket(System.getenv("DIRECT_BUCKET")).build(); }
+}
+class Legacy {
+    void send() { new SendMessageRequest().withQueueUrl(System.getenv("V1_QUEUE")).withMessageBody("x"); }
+}
+"""
+
+
+class CoverageTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.directory.cleanup)
+        cls.repository = make_repository(Path(cls.directory.name), "coverage", {JAVA + "Coverage.java": COVERAGE})
+        cls.points = {(item["value"]["construct"], item["value"]["binding"]["reference"]): item["value"]["binding"]
+                      for item in discover(cls.repository, "coverage")["observations"] if item["kind"] == "io-point"}
+
+    def binding(self, construct, reference):
+        return self.points[(construct, reference)]
+
+    def test_configuration_properties_classes_resolve_accessors(self):
+        binding = self.binding("StreamsBuilder.table", "kafka.topics.styleColor")
+        self.assertEqual(binding["form"], "config-key")
+        self.assertEqual(binding["via"], "configuration class TopicProperties.styleColor")
+
+    def test_constructor_fields_follow_callers_that_read_environment_variables(self):
+        self.assertEqual(self.binding("PutObjectRequest.bucket via Reader", "OUT_BUCKET")["form"], "config-key")
+
+    def test_helper_methods_that_read_an_environment_variable_bind_their_callers(self):
+        self.assertEqual(self.binding("ProducerRecord", "DERIVED_QUEUE")["form"], "config-key")
+
+    def test_provider_methods_and_direct_reads_resolve(self):
+        self.assertIn("provider method sitemapBucket()", self.binding("GetObjectRequest.bucket", "SITEMAP_BUCKET")["via"])
+        self.assertEqual(self.binding("GetObjectRequest.bucket", "DIRECT_BUCKET")["via"], "configuration read")
+
+    def test_v1_builder_chains_resolve(self):
+        self.assertEqual(self.binding("SendMessageRequest.queueUrl", "V1_QUEUE")["form"], "config-key")
+
+    def test_unresolved_call_sites_add_no_points(self):
+        self.assertFalse([key for key in self.points if "via Reader" in key[0] and key[1] != "OUT_BUCKET"])
+
+    def test_property_keys_also_match_their_kebab_case_spelling(self):
+        from landscape_core.io_links import key_variants
+        self.assertEqual(key_variants("kafka.topics.styleColor"), ["kafka.topics.styleColor", "kafka.topics.style-color"])
+        self.assertEqual(key_variants("a.b"), ["a.b"])
+
+
 def application(bundle):
     entry = bundle["selectedEvidence"][0]
     evidence = {"kind": "repository", "repositoryId": bundle["repository"], "commit": bundle["commit"],

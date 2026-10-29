@@ -34,9 +34,10 @@ withheld and reference), `resource`, `reference`, `valueLine`. Its source lines 
 `catalog link-config` accepts the Kubernetes selection inventories and evidence bundles
 beside the application ones.
 
-- A manifests selection is paired with the application repository whose id equals the last
-  folder of the selection subpath (a folder convention; the feed states it in
-  `missingEvidence`).
+- A manifests selection is paired through a topology binding when `link-config --topology`
+  is given (`declared` bindings remove the caveat). Without a binding it is paired with the
+  application repository whose id equals the last folder of the selection subpath; the feed
+  then states the convention in `missingEvidence`.
 - The profile of a manifest is the first directory named like a known environment
   (`dev`, `pro`, ...).
 - A configuration key resolves from its property values, then environment variables
