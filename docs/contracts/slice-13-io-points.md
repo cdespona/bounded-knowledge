@@ -2,7 +2,7 @@
 
 ## Boundary
 
-Detector `io-points` (version 1) reads Java and Kotlin files under `src/main/java` and
+Detector `io-points` (version 2) reads Java and Kotlin files under `src/main/java` and
 `src/main/kotlin` and reports where code produces to or consumes from a queue, topic, or
 channel and where it reads, writes, or maps persistent storage. It reports the lexical
 target and how it was named. It never decides what the target means. Test sources, comments,
@@ -27,7 +27,14 @@ target cannot be read, for example a `@KafkaListener` without `topics`.
 placeholder, `@Value`, or `@ConfigProperty`, directly or through a parameter, field alias, or
 a record built from such parameters), `channel`, `placeholder` (SQL template such as
 `$TABLE_NAME$`), `type` (entity or repository type), or `unresolved` (the expression text).
-`binding.via` records the resolution path. Methods that forward a parameter to a messaging
+`binding.via` records the resolution path. Besides `@Value`, `@ConfigProperty`, constants, and
+records, a name resolves through: variables assigned from `System.getenv("K")`, `getProperty("K")`,
+or `ConfigProvider...getValue("K")` (also as a direct argument); helper methods that read an
+environment variable named by their argument; `@ConfigurationProperties(prefix)` classes read
+through accessors (`prefix.field`, matched in camelCase or kebab-case); and parameterless
+provider methods that return such a read, matched to an injection point by name (the `via` says
+so). Fields assigned from a constructor parameter are followed to the callers of that
+constructor. Call sites whose argument stays unresolved add no point. Methods that forward a parameter to a messaging
 call are followed by name when the method name is unique in the repository.
 
 Literals pass through the AWS account mask used for configuration files, and every selected

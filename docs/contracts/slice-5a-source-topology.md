@@ -95,6 +95,17 @@ method. The dependency-free `validate_source_topology` operational validator als
 - arrays follow the deterministic ordering above;
 - source selections do not target a subtree excluded by the local source registry.
 
+`landscape topology infer-bindings TOPOLOGY --catalog CATALOG --output OUT` adds an `inferred`
+binding for every unbound selection a folder convention maps: an application selection to the
+catalog application whose repository evidence names its repository, and any other selection to
+the application whose repository id equals the last folder of its subpath. Existing bindings,
+declared or inferred, are never changed, and the result is validated. A human promotes an
+inferred binding by editing it to `declared` with `manual` provenance.
+
+`landscape catalog link-config ... --topology TOPOLOGY` uses these bindings to pair Kubernetes
+manifests with applications (deployable targets resolve through
+`application-comprises-deployable`).
+
 Run the complete cross-artifact validation through:
 
 ```text

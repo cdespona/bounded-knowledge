@@ -45,17 +45,22 @@ def _configuration(inventory):
     return index
 
 
-def _environment(inventories):
-    """Map each application repository to the literal environment variables of its manifests, by name."""
+def _environment(inventories, pairing=None):
+    """Map each application repository to the literal environment variables of its manifests, by name.
+
+    A selection is paired through a topology binding when one exists, else with the repository named
+    like the last folder of its subpath.
+    """
     result = {}
     for inventory in inventories:
         selection = inventory.get("sourceSelection")
         if not selection or selection.get("kind") != "kubernetes":
             continue
-        repository = PurePosixPath(selection["subpath"]).name
+        repositories = (pairing or {}).get(selection["id"], ({PurePosixPath(selection["subpath"]).name}, False))[0]
         for item in inventory["observations"]:
             if item["kind"] == "env-variable" and item["value"]["disposition"] == "literal":
-                result.setdefault(repository, {}).setdefault(item["value"]["name"], []).append(item)
+                for repository in repositories:
+                    result.setdefault(repository, {}).setdefault(item["value"]["name"], []).append(item)
     return result
 
 
@@ -63,10 +68,17 @@ def _manifest_profile(item):
     return manifest_profile(item["source"]["path"])
 
 
+def key_variants(key):
+    """The property key plus its kebab-case spelling, as Spring and Quarkus relaxed binding accept both."""
+    kebab = ".".join(re.sub(r"(?<!^)(?=[A-Z])", "-", segment).lower() for segment in key.split("."))
+    return [key] if kebab == key else [key, kebab]
+
+
 def _values(index, key, env):
     """Return ({profile: value}, items) for a key from properties, resolving env placeholders and overrides."""
     by_profile, items = {}, []
-    for item in sorted(index.get(key, []), key=lambda entry: (entry["source"]["path"], entry["value"]["line"])):
+    entries = [entry for variant in key_variants(key) for entry in index.get(variant, [])]
+    for item in sorted(entries, key=lambda entry: (entry["source"]["path"], entry["value"]["line"])):
         value = item["value"]
         if value["disposition"] == "literal":
             by_profile[value["profile"]] = value["value"]
@@ -86,7 +98,7 @@ def _values(index, key, env):
         if not found and placeholder.group(2) is not None:
             by_profile[value["profile"]] = placeholder.group(2)
             items.append(item)
-    for name in sorted(environment_names(key)):
+    for name in sorted({name for variant in key_variants(key) for name in environment_names(variant)}):
         for entry in env.get(name, []):
             by_profile[_manifest_profile(entry)] = entry["value"]["value"]
             items.append(entry)
@@ -135,9 +147,9 @@ def _resolve(point, index, env):
     return None
 
 
-def resolve_points(inventories):
+def resolve_points(inventories, pairing=None):
     resolved = []
-    environment = _environment(inventories)
+    environment = _environment(inventories, pairing)
     for inventory in inventories:
         index = _configuration(inventory)
         for item in inventory["observations"]:
@@ -159,9 +171,9 @@ def matching_profiles(first, second):
     return matched
 
 
-def feed_matches(inventories):
+def feed_matches(inventories, pairing=None):
     """Return {(producer repository, consumer repository): [match]} for producers paired with consumers."""
-    resolved = [item for item in resolve_points(inventories) if item.role in {"producer", "consumer", "writer", "reader"}]
+    resolved = [item for item in resolve_points(inventories, pairing) if item.role in {"producer", "consumer", "writer", "reader"}]
     result = {}
     for producer in resolved:
         if FLOW_ROLES[producer.role] != "producer":
@@ -171,19 +183,20 @@ def feed_matches(inventories):
                 continue
             if consumer.resource != producer.resource:
                 continue
-            profiles = matching_profiles(producer, consumer)
-            if profiles:
-                identity = producer.identity(profiles[0])
+            by_identity = {}
+            for profile in matching_profiles(producer, consumer):
+                by_identity.setdefault(producer.identity(profile), []).append(profile)
+            for identity, profiles in sorted(by_identity.items()):
                 result.setdefault((producer.repository, consumer.repository), []).append({
                     "resource": producer.resource, "identity": identity, "profiles": profiles,
                     "producer": producer, "consumer": consumer})
     return result
 
 
-def table_shares(inventories):
+def table_shares(inventories, pairing=None):
     """Return {(repository, repository): [match]} for tables named by two repositories in any role."""
     by_table = {}
-    for item in resolve_points(inventories):
+    for item in resolve_points(inventories, pairing):
         if item.resource == "table":
             by_table.setdefault(item.identity(None), []).append(item)
     result = {}
