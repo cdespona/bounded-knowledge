@@ -27,6 +27,10 @@ CONFIG_KINDS = {"config-property", "config-gap"}
 CONFIG_FORMS = {"properties", "yaml"}
 CONFIG_DISPOSITIONS = {"literal", "placeholder", "withheld", "empty"}
 CONFIG_RESOURCES = {"jdbc", "sqs", "kafka", "kafka-topic", "schema-registry", "amqp"}
+ENV_KINDS = {"env-variable"}
+ENV_DISPOSITIONS = {"literal", "withheld", "reference", "empty"}
+ENV_RESOURCES = {"jdbc", "sqs", "s3", "kafka", "kafka-topic", "schema-registry", "amqp"}
+ENV_REFERENCES = {"secretKeyRef", "configMapKeyRef", "fieldRef", "resourceFieldRef", "other"}
 IO_KINDS = {"io-point", "io-gap"}
 IO_ROLES = {
     "kafka": {"producer", "consumer"},
@@ -450,6 +454,38 @@ def validate_config_observation(item, prefix="observation"):
         errors.append("{}.value.value must be a string".format(prefix))
     if value["resource"] is not None and value["resource"] not in CONFIG_RESOURCES:
         errors.append("{}.value.resource is invalid".format(prefix))
+    return errors
+
+
+def validate_env_observation(item, prefix="observation"):
+    """Validate the kind-specific contract for a container environment variable observation."""
+    if not isinstance(item, dict) or item.get("kind") not in ENV_KINDS:
+        return ["{}.kind is not an environment observation kind".format(prefix)]
+    errors = validate_source_reference(item.get("source"), prefix + ".source", True)
+    value = item.get("value")
+    fields = {"name", "container", "workload", "sourceSelectionId", "disposition", "value", "resource",
+              "reference", "valueLine"}
+    if not _exact_fields(value, fields):
+        return errors + ["{}.value has invalid env-variable fields".format(prefix)]
+    for field in ("name", "sourceSelectionId"):
+        if not _is_non_empty_string(value[field]):
+            errors.append("{}.value.{} must be a non-empty string".format(prefix, field))
+    for field in ("container", "workload"):
+        if not isinstance(value[field], str):
+            errors.append("{}.value.{} must be a string".format(prefix, field))
+    if value["disposition"] not in ENV_DISPOSITIONS:
+        errors.append("{}.value.disposition is invalid".format(prefix))
+    elif (value["value"] is None) != (value["disposition"] in {"withheld", "reference"}):
+        errors.append("{}.value.value must be null exactly when the value is withheld or a reference".format(prefix))
+    elif value["value"] is not None and not isinstance(value["value"], str):
+        errors.append("{}.value.value must be a string".format(prefix))
+    if value["resource"] not in ENV_RESOURCES:
+        errors.append("{}.value.resource is invalid".format(prefix))
+    if (value["reference"] is None) != (value["disposition"] != "reference") or (
+            value["reference"] is not None and value["reference"] not in ENV_REFERENCES):
+        errors.append("{}.value.reference is invalid for the disposition".format(prefix))
+    if type(value["valueLine"]) is not int or value["valueLine"] < 1:
+        errors.append("{}.value.valueLine must be a positive integer".format(prefix))
     return errors
 
 

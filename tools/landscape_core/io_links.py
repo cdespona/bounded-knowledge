@@ -1,6 +1,12 @@
 """Resolve I/O points against configuration and pair producers with consumers across repositories."""
 
+import re
+from pathlib import PurePosixPath
+
+from .env_vars import environment_names, manifest_profile
+
 LOCAL_PROFILES = {"local", "test"}
+_PLACEHOLDER = re.compile(r"^\$\{([^}:]+)(?::(.*))?\}$")
 TECHNOLOGY_RESOURCES = {"kafka": "kafka-topic", "sqs": "sqs-queue", "s3": "s3-bucket", "amqp": "amqp-destination"}
 CONNECTOR_RESOURCES = (("kafka", "kafka-topic", "topic"), ("amqp", "amqp-destination", "address"),
                        ("rabbit", "amqp-destination", "address"))
@@ -39,12 +45,51 @@ def _configuration(inventory):
     return index
 
 
-def _values(index, key):
-    """Return ({profile: value}, items) for a key; later files in sorted order win within one profile."""
+def _environment(inventories):
+    """Map each application repository to the literal environment variables of its manifests, by name."""
+    result = {}
+    for inventory in inventories:
+        selection = inventory.get("sourceSelection")
+        if not selection or selection.get("kind") != "kubernetes":
+            continue
+        repository = PurePosixPath(selection["subpath"]).name
+        for item in inventory["observations"]:
+            if item["kind"] == "env-variable" and item["value"]["disposition"] == "literal":
+                result.setdefault(repository, {}).setdefault(item["value"]["name"], []).append(item)
+    return result
+
+
+def _manifest_profile(item):
+    return manifest_profile(item["source"]["path"])
+
+
+def _values(index, key, env):
+    """Return ({profile: value}, items) for a key from properties, resolving env placeholders and overrides."""
     by_profile, items = {}, []
     for item in sorted(index.get(key, []), key=lambda entry: (entry["source"]["path"], entry["value"]["line"])):
-        by_profile[item["value"]["profile"]] = item["value"]["value"]
-        items.append(item)
+        value = item["value"]
+        if value["disposition"] == "literal":
+            by_profile[value["profile"]] = value["value"]
+            items.append(item)
+            continue
+        placeholder = _PLACEHOLDER.match(value["value"] or "")
+        if value["disposition"] != "placeholder" or placeholder is None:
+            continue
+        found = False
+        for entry in env.get(placeholder.group(1).strip(), []):
+            profile = value["profile"] or _manifest_profile(entry)
+            if value["profile"] and _manifest_profile(entry) not in {None, value["profile"]}:
+                continue
+            by_profile[profile] = entry["value"]["value"]
+            items.append(entry)
+            found = True
+        if not found and placeholder.group(2) is not None:
+            by_profile[value["profile"]] = placeholder.group(2)
+            items.append(item)
+    for name in sorted(environment_names(key)):
+        for entry in env.get(name, []):
+            by_profile[_manifest_profile(entry)] = entry["value"]["value"]
+            items.append(entry)
     return by_profile, items
 
 
@@ -57,7 +102,7 @@ def _identity(resource, value):
     return value
 
 
-def _resolve(point, index):
+def _resolve(point, index, env):
     value = point["value"]
     binding = value["binding"]
     technology, form = value["technology"], binding["form"]
@@ -69,17 +114,17 @@ def _resolve(point, index):
     if form == "literal" and resource is not None:
         return Resolved(point, resource, {None: _identity(resource, binding["reference"])}, [])
     if form == "config-key" and resource is not None:
-        values, items = _values(index, binding["reference"])
+        values, items = _values(index, binding["reference"], env)
         if values:
             return Resolved(point, resource, {profile: _identity(resource, text) for profile, text in values.items()},
                             items, "queue name only" if resource == "sqs-queue" else None)
         return None
     if form == "channel" and technology == "messaging":
         prefix = "mp.messaging.{}.{}.".format(DIRECTION[value["role"]], binding["reference"])
-        connectors, connector_items = _values(index, prefix + "connector")
+        connectors, connector_items = _values(index, prefix + "connector", env)
         for needle, resource, key in CONNECTOR_RESOURCES:
             if any(needle in text for text in connectors.values()):
-                values, items = _values(index, prefix + key)
+                values, items = _values(index, prefix + key, env)
                 if values:
                     return Resolved(point, resource, {profile: _identity(resource, text) for profile, text in values.items()},
                                     connector_items + items)
@@ -92,11 +137,12 @@ def _resolve(point, index):
 
 def resolve_points(inventories):
     resolved = []
+    environment = _environment(inventories)
     for inventory in inventories:
         index = _configuration(inventory)
         for item in inventory["observations"]:
             if item["kind"] == "io-point":
-                result = _resolve(item, index)
+                result = _resolve(item, index, environment.get(inventory["repository"], {}))
                 if result is not None:
                     resolved.append(result)
     return resolved

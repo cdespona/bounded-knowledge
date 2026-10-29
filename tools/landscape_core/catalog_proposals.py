@@ -70,11 +70,11 @@ def _assessments(proposal):
 
 
 def _check_repository(evidence, bundles, prefix):
-    bundle = next((item for item in bundles
-                   if item["repository"] == evidence["repositoryId"] and item["commit"] == evidence["commit"]), None)
-    if bundle is None:
+    pinned = [item for item in bundles
+              if item["repository"] == evidence["repositoryId"] and item["commit"] == evidence["commit"]]
+    if not pinned:
         return ["{} cites a repository or commit that no supplied evidence bundle pins".format(prefix)]
-    entries = [entry for entry in bundle["selectedEvidence"] if entry["path"] == evidence["path"]]
+    entries = [entry for bundle in pinned for entry in bundle["selectedEvidence"] if entry["path"] == evidence["path"]]
     if not entries:
         return ["{} cites a path that the evidence bundle did not select".format(prefix)]
     if "lines" in evidence:

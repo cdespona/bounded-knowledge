@@ -17,6 +17,7 @@ _ACCOUNT_PATTERNS = (
     re.compile(r"(localhost(?::\d+)?/)(\d{12})(?!\d)"),
     re.compile(r"(arn:aws[a-z-]*:[a-z0-9-]*:[a-z0-9-]*:)(\d{12})(?!\d)"),
     re.compile(r"(account[-_.]?id\s*[=:]\s*)(\d{12})(?!\d)", re.IGNORECASE),
+    re.compile(r"(?<!\d)()(\d{12})(?=\.dkr\.ecr[\w.-]*\.amazonaws\.com)"),
 )
 _YAML_KEY = re.compile(r"""^(?P<key>"[^"]+"|'[^']+'|[^:#\s][^:#]*?)\s*:(?:\s+(?P<value>.*))?$""")
 _PROPERTY = re.compile(r"^(?P<key>[^=:\s]+)(?:\s*[=:]\s*|\s+)?(?P<value>.*)$")

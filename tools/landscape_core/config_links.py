@@ -44,6 +44,8 @@ def _evidence(bundles, item):
         return None
     if item["kind"] == "config-property":
         lines = str(item["value"]["line"])
+    elif item["kind"] == "env-variable":
+        lines = item["source"]["lines"]
     else:
         lines = item["source"]["lines"]
     return _range_evidence(bundle, entry, lines, item["id"])
@@ -80,6 +82,10 @@ def _feed_missing(matches):
         missing.append("SQS queues are compared by queue name only; region and account are not compared.")
     if "channel name used as the topic" in notes:
         missing.append("A messaging channel without a configured topic is read as using the channel name as the topic.")
+    if any(config["kind"] == "env-variable" for match in matches for item in (match["producer"], match["consumer"])
+           for config in item.config_items):
+        missing.append("Environment values come from the Kubernetes manifests folder named after the repository; "
+                       "that pairing is a folder convention.")
     return missing
 
 

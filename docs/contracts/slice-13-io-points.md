@@ -54,6 +54,6 @@ catalog cites the exact I/O lines inside the selected range.
   or database instance is not established. SQS targets compare queue names only.
 - Tables that two applications touch without a producer/consumer split become shared-resource
   relationships.
-- Unresolved targets (for example an environment variable such as `QUEUE_URL`) stay visible as
-  `unresolved` points; they produce no relationship and are a natural subject for
+- Targets that stay unresolved (for example an environment variable that no manifest or property
+  defines) stay visible as `unresolved` points; they produce no relationship and are a natural subject for
   questionnaire questions.

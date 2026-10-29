@@ -5,6 +5,7 @@ import json
 from pathlib import Path, PurePosixPath
 
 from .config_files import is_config_path, mask_account_ids, mask_config_text
+from .env_vars import mask_env_lines
 from .contracts import artifact_id, validate_evidence_bundle
 from .git_repository import commit_sha, dirty_paths, require_repository_root
 from .safety import MAX_FILE_BYTES, copilot_configuration_files, exclusion_reason
@@ -32,7 +33,7 @@ def _candidate_category(observation_ids, observations_by_id):
         return "io-point"
     if any(kind.startswith("config-") for kind in kinds):
         return "config-literal"
-    if any(kind.startswith("container-") for kind in kinds):
+    if any(kind.startswith(("container-", "env-")) for kind in kinds):
         return "container-literal"
     return "repository-file"
 
@@ -206,6 +207,11 @@ def select_evidence(inventory, source, purpose="general"):
         and item.get("kind") not in GAP_KINDS
         and not item.get("kind", "").startswith("io-")
     }
+    withheld_ranges = {}
+    for item in observations:
+        if isinstance(item, dict) and item.get("kind") == "env-variable" and item["value"]["disposition"] == "withheld":
+            last = item["source"]["lines"].partition("-")[2] or item["source"]["lines"]
+            withheld_ranges.setdefault(item["source"]["path"], []).append((item["value"]["valueLine"], int(last)))
     candidates = {}
     whole_file_keys = set()
     gaps = []
@@ -317,6 +323,7 @@ def select_evidence(inventory, source, purpose="general"):
         if is_config_path(relative):
             lines = mask_config_text("\n".join(lines), relative).split("\n")
         else:
+            lines = mask_env_lines(lines, withheld_ranges.get(relative, []))
             lines = mask_account_ids("\n".join(lines)).split("\n")
         content, actual_end, truncated = _bounded_content(lines, start, end)
         truncated = truncated or ((relative, requested_lines) in whole_file_keys and actual_end < len(lines))

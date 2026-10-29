@@ -100,7 +100,7 @@ class KubernetesImageInventoryTest(unittest.TestCase):
         inventory = self.inventory()
         self.assertEqual([], validate_inventory(inventory, source=self.repository))
         self.assertEqual(
-            {"git", "kubernetes-images"},
+            {"git", "kubernetes-env", "kubernetes-images"},
             {item["name"] for item in inventory["detectors"]},
         )
         self.assertEqual(
