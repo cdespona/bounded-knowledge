@@ -1,5 +1,6 @@
 """Deterministic checks and review diffs for untrusted model-proposed catalogs."""
 
+import hashlib
 import json
 
 from .candidates import extract_candidate_response
@@ -189,8 +190,8 @@ def render_catalog_review(proposal, current=None, draft=None):
     lines = ["# Catalog proposal review", "",
              "Draft proposal only. Nothing here is canonical until a human approves it.", "",
              "## Diff against the current catalog", ""]
-    for title, key in (("Added", "added"), ("Removed", "removed"), ("Changed", "changed"),
-                       ("Open questions added", "openQuestionsAdded"), ("Open questions removed", "openQuestionsRemoved")):
+    for title, key in (("Added", "added"), ("Kept, not in this proposal", "removed"), ("Changed", "changed"),
+                       ("Open questions added", "openQuestionsAdded"), ("Open questions kept, not in this proposal", "openQuestionsRemoved")):
         lines.append("- {}: {}".format(title, len(diff[key])))
         lines.extend("  - `{}`".format(item) for item in diff[key])
     for collection in list(CATALOG_COLLECTION_TYPES) + ["relationships"]:
@@ -198,4 +199,5 @@ def render_catalog_review(proposal, current=None, draft=None):
             lines += ["", "## {}".format(collection), ""]
             for item in proposal[collection]:
                 lines.extend(_render_entity(collection, item, answers))
-    return "\n".join(lines) + "\n"
+    body = "\n".join(lines) + "\n"
+    return body + "\nReview digest (sha256 of the text above): `{}`\n".format(hashlib.sha256(body.encode("utf-8")).hexdigest())

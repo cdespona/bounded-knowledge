@@ -15,6 +15,7 @@ from .candidates import extract_candidate_response, validate_candidate
 from .discovery import discover, preflight
 from .evidence import select_evidence
 from .config_links import propose_shared_resource_relationships
+from .promotion import build_approval, promote, serialize
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
@@ -176,6 +177,27 @@ def build_parser():
     catalog_review_parser.add_argument("--current")
     catalog_review_parser.add_argument("--draft")
     catalog_review_parser.add_argument("--output", required=True)
+
+    catalog_approve_parser = catalog_subparsers.add_parser(
+        "approve", help="record a human approval bound to the digest of a proposal review"
+    )
+    catalog_approve_parser.add_argument("proposal")
+    catalog_approve_parser.add_argument("--draft", required=True)
+    catalog_approve_parser.add_argument("--current")
+    catalog_approve_parser.add_argument("--reviewed", required=True, help="digest printed at the end of the review")
+    catalog_approve_parser.add_argument("--by", required=True)
+    catalog_approve_parser.add_argument("--at", required=True)
+    catalog_approve_parser.add_argument("--output", required=True)
+    catalog_promote_parser = catalog_subparsers.add_parser(
+        "promote", help="write an approved proposal into the canonical catalog"
+    )
+    catalog_promote_parser.add_argument("proposal")
+    catalog_promote_parser.add_argument("--approval", required=True)
+    catalog_promote_parser.add_argument("--draft", required=True)
+    catalog_promote_parser.add_argument("--evidence", required=True, nargs="+")
+    catalog_promote_parser.add_argument("--catalog", required=True)
+    catalog_promote_parser.add_argument("--promotions", required=True)
+    catalog_promote_parser.add_argument("--dry-run", action="store_true")
 
     topology_parser = subparsers.add_parser(
         "topology", help="validate logical source selections and bindings"
@@ -340,6 +362,22 @@ def main(argv=None):
             Path(args.output).parent.mkdir(parents=True, exist_ok=True)
             draft = json.loads(Path(args.draft).read_text(encoding="utf-8")) if args.draft else None
             Path(args.output).write_text(render_catalog_review(proposal, current, draft), encoding="utf-8")
+            return 0
+
+        if args.command == "catalog" and args.catalog_command == "approve":
+            proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
+            draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
+            current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current and Path(args.current).exists() else None
+            approval = build_approval(proposal, current, draft, args.reviewed, args.by, args.at)
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(serialize(approval), encoding="utf-8")
+            return 0
+        if args.command == "catalog" and args.catalog_command == "promote":
+            proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
+            draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
+            approval = json.loads(Path(args.approval).read_text(encoding="utf-8"))
+            bundles = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.evidence]
+            _write_json(promote(proposal, draft, bundles, approval, Path(args.catalog), Path(args.promotions), args.dry_run))
             return 0
 
         if args.command == "topology" and args.topology_command == "validate":
