@@ -59,12 +59,12 @@ class PromotionTest(unittest.TestCase):
         written = json.loads(self.catalog.read_text(encoding="utf-8"))
         self.assertEqual(validate_landscape_catalog(written), [])
         self.assertEqual(self.catalog.read_text(encoding="utf-8"), serialize(written))
-        self.assertEqual([item["id"] for item in written["applications"]], ["synthetic-app"])
+        self.assertEqual([item["id"] for item in written["applications"]], ["synthetic-java-service-app"])
         records = list(self.promotions.glob("*.json"))
         self.assertEqual(len(records), 1)
         record = json.loads(records[0].read_text(encoding="utf-8"))
         self.assertEqual(record["approvedBy"], "Technical lead")
-        self.assertEqual(record["accepted"]["added"], ["applications/synthetic-app"])
+        self.assertEqual(record["accepted"]["added"], ["applications/synthetic-java-service-app"])
         self.assertEqual(record["evidenceBundleIds"], [self.bundle["id"]])
 
     def test_dry_run_writes_nothing(self):
@@ -115,7 +115,7 @@ class PromotionTest(unittest.TestCase):
         other["applications"][0]["id"] = "second-app"
         other["openQuestions"] = ["Who owns it?"]
         merged = merge_catalog(other, current)
-        self.assertEqual([item["id"] for item in merged["applications"]], ["second-app", "synthetic-app"])
+        self.assertEqual([item["id"] for item in merged["applications"]], ["second-app", "synthetic-java-service-app"])
         self.assertEqual(merged["openQuestions"], ["Who owns it?"])
         review = render_catalog_review(other, current, self.draft)
         self.assertIn("Kept, not in this proposal: 1", review)

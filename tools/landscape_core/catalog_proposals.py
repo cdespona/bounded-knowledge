@@ -4,6 +4,7 @@ import hashlib
 import json
 
 from .candidates import extract_candidate_response
+from .catalog_ids import normalize_ids
 from .contracts import (
     CATALOG_COLLECTION_TYPES,
     _knowledge_evidence_key,
@@ -46,9 +47,11 @@ def canonicalize_catalog_proposal(proposal):
     return proposal
 
 
-def extract_catalog_proposal(response):
-    """Extract exactly one JSON object from a model response and canonicalize its list order."""
-    return canonicalize_catalog_proposal(extract_candidate_response(response))
+def extract_catalog_proposal(response, current=None):
+    """Extract exactly one JSON object from a model response, give its entities their conventional ids
+    (adopting the ids of same-named concepts in ``current``), and canonicalize its list order."""
+    proposal, _ = normalize_ids(canonicalize_catalog_proposal(extract_candidate_response(response)), current)
+    return canonicalize_catalog_proposal(proposal)
 
 
 def empty_catalog():

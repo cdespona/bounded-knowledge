@@ -55,7 +55,7 @@ def interview(**overrides):
 def proposal(bundle, status="inferred", evidence=None):
     document = empty_catalog()
     document["applications"] = [{
-        "id": "synthetic-app", "name": "Synthetic app", "purpose": "Exercise the proposal checks.",
+        "id": bundle["repository"] + "-app", "name": "Synthetic app", "purpose": "Exercise the proposal checks.",
         "assessment": {"status": status, "confidence": "medium", "analyzedAt": ANSWERED_AT,
                        "evidence": evidence if evidence is not None else [interview(), repository_evidence(bundle)],
                        "counterevidence": []},
@@ -107,9 +107,9 @@ class CatalogProposalTests(unittest.TestCase):
         current["applications"][0]["purpose"] = "Old purpose."
         current["openQuestions"] = ["Who owns it?"]
         self.assertEqual(diff_catalog(document), {
-            "added": ["applications/synthetic-app"], "removed": [], "changed": [],
+            "added": ["applications/" + self.bundle["repository"] + "-app"], "removed": [], "changed": [],
             "openQuestionsAdded": [], "openQuestionsRemoved": []})
-        self.assertEqual(diff_catalog(document, current)["changed"], ["applications/synthetic-app"])
+        self.assertEqual(diff_catalog(document, current)["changed"], ["applications/" + self.bundle["repository"] + "-app"])
         review = render_catalog_review(document, current)
         self.assertIn("Nothing here is canonical", review)
         self.assertEqual(review, render_catalog_review(document, current))
@@ -123,11 +123,12 @@ class CatalogProposalTests(unittest.TestCase):
         document = proposal(self.bundle)
         second = copy.deepcopy(document["applications"][0])
         second["id"] = "another-app"
+        second["assessment"]["evidence"] = [interview()]
         document["applications"].insert(0, second)
         document["applications"][1]["assessment"]["evidence"].reverse()
         document["openQuestions"] = ["b", "a", "b"]
         extracted = extract_catalog_proposal(json.dumps(document))
-        self.assertEqual([item["id"] for item in extracted["applications"]], ["another-app", "synthetic-app"])
+        self.assertEqual([item["id"] for item in extracted["applications"]], ["another-app", self.bundle["repository"] + "-app"])
         self.assertEqual(extracted["openQuestions"], ["a", "b"])
         self.assertEqual(self.errors(extracted), [])
         self.assertEqual(extracted["applications"][1]["purpose"], document["applications"][1]["purpose"])
@@ -146,7 +147,7 @@ class CatalogProposalTests(unittest.TestCase):
             review = subprocess.run(command + ["review", str(base / "proposal.json"), "--output", str(base / "review.md")],
                                     capture_output=True, text=True)
             self.assertEqual(review.returncode, 0, review.stderr)
-            self.assertIn("applications/synthetic-app", (base / "review.md").read_text(encoding="utf-8"))
+            self.assertIn("applications/" + self.bundle["repository"] + "-app", (base / "review.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

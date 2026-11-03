@@ -18,6 +18,7 @@ from .config_links import propose_shared_resource_relationships
 from .topology_bindings import infer_bindings, selection_pairs
 from .binding_questions import generate_binding_questions
 from .promotion import build_approval, promote, serialize
+from .catalog_ids import convention_errors
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
@@ -167,6 +168,7 @@ def build_parser():
         "extract", help="extract one proposed catalog from a model response"
     )
     catalog_extract_parser.add_argument("response")
+    catalog_extract_parser.add_argument("--current", help="catalog whose ids same-named concepts adopt")
     catalog_extract_parser.add_argument("--output", required=True)
     catalog_propose_parser = catalog_subparsers.add_parser(
         "propose-validate", help="validate a proposed catalog against answers and evidence"
@@ -372,13 +374,16 @@ def main(argv=None):
             return 0 if not errors else 1
 
         if args.command == "catalog" and args.catalog_command == "extract":
-            _write_json(extract_catalog_proposal(Path(args.response).read_text(encoding="utf-8")), output=args.output)
+            current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None
+            if current is not None and validate_landscape_catalog(current):
+                raise ValueError("--current is not a valid catalog")
+            _write_json(extract_catalog_proposal(Path(args.response).read_text(encoding="utf-8"), current), output=args.output)
             return 0
         if args.command == "catalog" and args.catalog_command == "propose-validate":
             proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
             draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
             bundles = [json.loads(Path(path).read_text(encoding="utf-8")) for path in args.evidence]
-            errors = validate_catalog_proposal(proposal, draft, bundles)
+            errors = validate_catalog_proposal(proposal, draft, bundles) or convention_errors(proposal)
             _write_json({"valid": not errors, "errors": errors})
             return 0 if not errors else 1
         if args.command == "catalog" and args.catalog_command == "link-config":
