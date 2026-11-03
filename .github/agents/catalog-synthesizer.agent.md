@@ -16,6 +16,9 @@ or Markdown, with the collections `applications`, `deployables`, `boundedContext
 `bounded-context-defines-term`, and `application-contributes-to-strategic-capability`.
 Entity and relationship ids are lowercase kebab-case and unique across the catalog;
 collections are sorted by id and relationships by type then id.
+Name an application `<repositoryId>-app`, a deployable `<repositoryId>-deployable`, and a
+term after its name in kebab-case (`ProductPropalDTO` is `product-propal-dto`); tooling renames
+them if you do not.
 
 Each entity and relationship carries an `assessment` with `status`, `confidence`,
 `analyzedAt`, `evidence`, `counterevidence`, and, when `unknown`, a non-empty sorted
