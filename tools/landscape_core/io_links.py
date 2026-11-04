@@ -14,10 +14,22 @@ DIRECTION = {"producer": "outgoing", "consumer": "incoming"}
 FLOW_ROLES = {"producer": "producer", "consumer": "consumer", "writer": "producer", "reader": "consumer"}
 
 
+_SQS_REGION = re.compile(r"\bsqs\.([a-z]{2}(?:-[a-z]+)+-\d)\.amazonaws\.com")
+
+
+def _regions(resource, texts):
+    """Map each profile to the AWS region named by its queue URL, for the profiles whose value is such a URL."""
+    if resource != "sqs-queue":
+        return {}
+    found = {profile: _SQS_REGION.search(text) for profile, text in texts.items()}
+    return {profile: match.group(1) for profile, match in found.items() if match}
+
+
 class Resolved:
     """An I/O point whose target was resolved to comparable identities per configuration profile."""
 
-    def __init__(self, point, resource, by_profile, config_items, note=None, curated=None):
+    def __init__(self, point, resource, by_profile, config_items, note=None, curated=None, texts=None):
+        self.regions = _regions(resource, texts or {})
         self.point = point
         self.resource = resource
         self.by_profile = by_profile
@@ -35,6 +47,9 @@ class Resolved:
 
     def identity(self, profile):
         return self.by_profile.get(profile, self.by_profile.get(None))
+
+    def region(self, profile):
+        return self.regions.get(profile, self.regions.get(None))
 
 
 def _configuration(inventory):
@@ -125,12 +140,13 @@ def _resolve(point, index, env):
         return None
     resource = TECHNOLOGY_RESOURCES.get(technology)
     if form == "literal" and resource is not None:
-        return Resolved(point, resource, {None: _identity(resource, binding["reference"])}, [])
+        return Resolved(point, resource, {None: _identity(resource, binding["reference"])}, [],
+                        texts={None: binding["reference"]})
     if form == "config-key" and resource is not None:
         values, items = _values(index, binding["reference"], env)
         if values:
             return Resolved(point, resource, {profile: _identity(resource, text) for profile, text in values.items()},
-                            items, "queue name only" if resource == "sqs-queue" else None)
+                            items, "queue name only" if resource == "sqs-queue" else None, texts=values)
         return None
     if form == "channel" and technology == "messaging":
         prefix = "mp.messaging.{}.{}.".format(DIRECTION[value["role"]], binding["reference"])
@@ -140,7 +156,7 @@ def _resolve(point, index, env):
                 values, items = _values(index, prefix + key, env)
                 if values:
                     return Resolved(point, resource, {profile: _identity(resource, text) for profile, text in values.items()},
-                                    connector_items + items)
+                                    connector_items + items, texts=values)
                 excluded = {prefix + "topics", prefix + "topic-pattern", prefix + "pattern"}
                 if resource == "kafka-topic" and not any(name in index for name in excluded):
                     return Resolved(point, resource, {None: binding["reference"]}, connector_items,
@@ -168,7 +184,8 @@ def _answered(point, answers):
     by_profile = {entry["profile"]: _identity(resource, entry["value"]) for entry in answer["values"]}
     curated = {"kind": "curated", "sourceId": question["id"], "sourceType": "interview",
                "suppliedBy": answer["answerer"], "recordedAt": answer["recordedAt"]}
-    return Resolved(point, resource, by_profile, [], curated=[curated])
+    return Resolved(point, resource, by_profile, [], curated=[curated],
+                    texts={entry["profile"]: entry["value"] for entry in answer["values"]})
 
 
 def resolve_points(inventories, pairing=None, draft=None):
@@ -206,7 +223,8 @@ def matching_profiles(first, second):
     matched = []
     for profile in sorted(profiles, key=lambda name: (name is not None, name or "")):
         left, right = first.identity(profile), second.identity(profile)
-        if left is not None and left == right:
+        regions = first.region(profile), second.region(profile)
+        if left is not None and left == right and (None in regions or regions[0] == regions[1]):
             matched.append(profile)
     return matched
 
@@ -229,6 +247,7 @@ def feed_matches(inventories, pairing=None, draft=None):
             for identity, profiles in sorted(by_identity.items()):
                 result.setdefault((producer.repository, consumer.repository), []).append({
                     "resource": producer.resource, "identity": identity, "profiles": profiles,
+                    "regionCompared": all(producer.region(profile) and consumer.region(profile) for profile in profiles),
                     "producer": producer, "consumer": consumer})
     return result
 

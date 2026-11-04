@@ -58,7 +58,9 @@ catalog cites the exact I/O lines inside the selected range.
   than `local` and `test`. The profile `default` applies where a profile has no override.
 - One relationship per ordered application pair lists every matched target, is `inferred`
   with `medium` confidence, and states in `missingEvidence` that the same cluster, account,
-  or database instance is not established. SQS targets compare queue names only.
+  or database instance is not established. SQS targets compare queue names, and also regions when both sides give a queue URL
+  (`sqs.<region>.amazonaws.com`): the same name in different regions does not match, and the caveat then
+  reads "queue name and region; account is not compared". Accounts are never compared, because they are masked.
 - Tables that two applications touch without a producer/consumer split become shared-resource
   relationships.
 - Targets that stay unresolved (for example an environment variable that no manifest or property
