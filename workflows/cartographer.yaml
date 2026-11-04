@@ -1,0 +1,56 @@
+# Sequences one repository's cartographer stage: prepare inputs, run Copilot, check, retry.
+# All parsing and validation lives in `landscape stage`; this file only routes. Run from the repository root.
+workflow:
+  name: cartographer
+  description: Produce one validated candidate profile from one evidence bundle.
+  entry_point: prepare
+  input:
+    evidence:
+      type: string
+      description: Path to the evidence bundle JSON.
+    analyzed_at:
+      type: string
+      description: ISO 8601 timestamp used for every analyzedAt value.
+    work_dir:
+      type: string
+      description: New, empty directory for the staged inputs and captured responses.
+    candidate:
+      type: string
+      description: Where to write the validated candidate.
+  limits:
+    # prepare once, then at most three run/check attempts: the only cost limit, because the model runs as a subprocess.
+    max_iterations: 7
+    timeout_seconds: 1800
+
+agents:
+  - name: prepare
+    type: script
+    command: ./tools/landscape
+    args: [stage, prepare, cartographer, --output-dir, "{{ workflow.input.work_dir }}", --evidence, "{{ workflow.input.evidence }}", --analyzed-at, "{{ workflow.input.analyzed_at }}"]
+    routes:
+      - to: run
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: run
+    type: script
+    description: One read-only Copilot invocation in the staged directory; a failure is left for the check to report.
+    command: ./tools/landscape
+    args: [stage, run, "{{ workflow.input.work_dir }}", --output, "{{ workflow.input.work_dir }}/response.txt"]
+    timeout: 320
+    routes:
+      - to: check
+
+  - name: check
+    type: script
+    command: ./tools/landscape
+    args: [stage, check, cartographer, --response, "{{ workflow.input.work_dir }}/response.txt", --evidence, "{{ workflow.input.evidence }}", --output, "{{ workflow.input.candidate }}"]
+    routes:
+      - to: $end
+        when: "{{ output.exit_code == 0 }}"
+      - to: run
+
+output:
+  prepared: "{{ prepare.output.exit_code == 0 }}"
+  valid: "{{ check.output.exit_code == 0 }}"
+  report: "{{ check.output.stdout }}"

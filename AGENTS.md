@@ -13,8 +13,8 @@ source repositories as writable project modules.
 - `examples/` contains synthetic Java and Kotlin fixtures only.
 - `work/` contains disposable generated artifacts and is not canonical.
 - `catalog/`, `findings/`, and `views/` contain reviewed knowledge.
-- Future `workflows/` files orchestrate scripts, Copilot agents, and human gates through
-  Microsoft Conductor. Workflow YAML must not contain parsing or domain logic.
+- `workflows/` files orchestrate `landscape` commands and human gates through Microsoft Conductor;
+  Copilot runs only through `landscape stage run`. Workflow YAML must not contain parsing or domain logic.
 
 ## Evidence rules
 

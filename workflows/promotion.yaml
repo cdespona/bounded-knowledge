@@ -1,0 +1,94 @@
+# Sequences the human-gated path from a linked catalog proposal to promotion.
+# Validation, the review digest, the approval record and the single catalog writer are `landscape catalog` commands;
+# this file only routes. The first gate option is the safe one, so `--skip-gates` can never approve.
+# Run from the repository root. Evidence paths are space separated and must not contain spaces.
+workflow:
+  name: promotion
+  description: Validate, review, gate on a human approval of the review digest, then promote.
+  entry_point: validate
+  input:
+    proposal:
+      type: string
+      description: Linked catalog proposal JSON.
+    draft:
+      type: string
+      description: Answered questionnaire draft the proposal cites.
+    evidence:
+      type: string
+      description: Space separated evidence bundle JSON paths.
+    catalog:
+      type: string
+      description: Canonical catalog to promote into.
+      default: catalog/landscape-catalog.json
+    promotions:
+      type: string
+      description: Directory for promotion records.
+      default: catalog/promotions
+    review:
+      type: string
+      description: Where to write the Markdown review.
+    approval:
+      type: string
+      description: Where to write the approval record.
+    approver:
+      type: string
+      description: Name recorded as the approver.
+    approved_at:
+      type: string
+      description: ISO 8601 approval time with timezone.
+  limits:
+    max_iterations: 8
+    timeout_seconds: 7200
+
+agents:
+  - name: validate
+    type: script
+    command: sh
+    args: [-c, 'exec ./tools/landscape catalog propose-validate "$0" --draft "$1" --evidence $2', "{{ workflow.input.proposal }}", "{{ workflow.input.draft }}", "{{ workflow.input.evidence }}"]
+    routes:
+      - to: review
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: review
+    type: script
+    command: ./tools/landscape
+    args: [catalog, review, "{{ workflow.input.proposal }}", --current, "{{ workflow.input.catalog }}", --draft, "{{ workflow.input.draft }}", --output, "{{ workflow.input.review }}"]
+    routes:
+      - to: approval_gate
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: approval_gate
+    type: human_gate
+    prompt: |
+      Read {{ workflow.input.review }}. Approving binds your approval to the digest printed on its last line,
+      so type that digest exactly. Nothing is promoted without it.
+    options:
+      - label: Reject or stop here
+        value: reject
+        route: $end
+      - label: Approve and promote
+        value: approve
+        route: approve
+        prompt_for: digest
+
+  - name: approve
+    type: script
+    command: ./tools/landscape
+    args: [catalog, approve, "{{ workflow.input.proposal }}", --draft, "{{ workflow.input.draft }}", --current, "{{ workflow.input.catalog }}", --reviewed, "{{ approval_gate.output.additional_input.digest }}", --by, "{{ workflow.input.approver }}", --at, "{{ workflow.input.approved_at }}", --output, "{{ workflow.input.approval }}"]
+    routes:
+      - to: promote
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: promote
+    type: script
+    command: sh
+    args: [-c, 'exec ./tools/landscape catalog promote "$0" --approval "$1" --draft "$2" --catalog "$3" --promotions "$4" --evidence $5', "{{ workflow.input.proposal }}", "{{ workflow.input.approval }}", "{{ workflow.input.draft }}", "{{ workflow.input.catalog }}", "{{ workflow.input.promotions }}", "{{ workflow.input.evidence }}"]
+    routes:
+      - to: $end
+
+output:
+  decision: "{{ approval_gate.output.selected if approval_gate is defined else 'not reached' }}"
+  promoted: "{{ promote.output.stdout if promote is defined else '' }}"
