@@ -82,7 +82,9 @@ def _feed_missing(matches, declared=frozenset()):
         missing.append("A target value comes from an interview answer, not from code or configuration.")
     notes = {item.note for match in matches for item in (match["producer"], match["consumer"]) if item.note}
     if "queue name only" in notes:
-        missing.append("SQS queues are compared by queue name only; region and account are not compared.")
+        compared = all(match["regionCompared"] for match in matches if match["resource"] == "sqs-queue")
+        missing.append("SQS queues are compared by queue name and region; account is not compared." if compared
+                       else "SQS queues are compared by queue name only; region and account are not compared.")
     if "channel name used as the topic" in notes:
         missing.append("A messaging channel without a configured topic is read as using the channel name as the topic.")
     if any(config["kind"] == "env-variable" and config["value"]["sourceSelectionId"] not in declared
