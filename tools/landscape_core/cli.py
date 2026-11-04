@@ -19,6 +19,7 @@ from .topology_bindings import infer_bindings, selection_pairs
 from .binding_questions import generate_binding_questions
 from .promotion import build_approval, promote, serialize
 from .catalog_ids import convention_errors
+from .stages import STAGE_AGENTS, check_stage, prepare_stage, run_stage
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
@@ -154,6 +155,28 @@ def build_parser():
     questionnaire_bindings_parser.add_argument("--respondent-role", required=True)
     questionnaire_bindings_parser.add_argument("--output", required=True)
 
+    stage_parser = subparsers.add_parser("stage", help="prepare, run and check a model-backed stage")
+    stage_subparsers = stage_parser.add_subparsers(dest="stage_command", required=True)
+    stage_prepare_parser = stage_subparsers.add_parser("prepare", help="stage the inputs and prompt of one stage")
+    stage_prepare_parser.add_argument("stage", choices=sorted(STAGE_AGENTS))
+    stage_prepare_parser.add_argument("--output-dir", required=True)
+    stage_prepare_parser.add_argument("--evidence", required=True, nargs="+")
+    stage_prepare_parser.add_argument("--candidate", nargs="+", default=[])
+    stage_prepare_parser.add_argument("--answers")
+    stage_prepare_parser.add_argument("--analyzed-at")
+    stage_prepare_parser.add_argument("--respondent-id", default="technical-lead")
+    stage_prepare_parser.add_argument("--respondent-role", default="technical lead")
+    stage_run_parser = stage_subparsers.add_parser("run", help="run the Copilot agent of a prepared stage once")
+    stage_run_parser.add_argument("stage_dir")
+    stage_run_parser.add_argument("--output", required=True)
+    stage_run_parser.add_argument("--timeout", type=int, default=290)
+    stage_check_parser = stage_subparsers.add_parser("check", help="extract and validate a captured stage response")
+    stage_check_parser.add_argument("stage", choices=sorted(STAGE_AGENTS))
+    stage_check_parser.add_argument("--response", required=True)
+    stage_check_parser.add_argument("--evidence", required=True, nargs="+")
+    stage_check_parser.add_argument("--answers")
+    stage_check_parser.add_argument("--current")
+    stage_check_parser.add_argument("--output", required=True)
     catalog_parser = subparsers.add_parser(
         "catalog", help="validate canonical landscape knowledge"
     )
@@ -373,6 +396,22 @@ def main(argv=None):
             _write_json({"valid": not errors, "errors": errors})
             return 0 if not errors else 1
 
+        if args.command == "stage" and args.stage_command == "prepare":
+            _write_json(prepare_stage(args.stage, args.output_dir, args.evidence, args.candidate, args.answers,
+                                      args.analyzed_at, args.respondent_id, args.respondent_role))
+            return 0
+        if args.command == "stage" and args.stage_command == "run":
+            outcome = run_stage(args.stage_dir, args.output, args.timeout)
+            _write_json(outcome)
+            return 0 if outcome["exitCode"] == 0 else 1
+        if args.command == "stage" and args.stage_command == "check":
+            current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None
+            document, errors = check_stage(args.stage, Path(args.response).read_text(encoding="utf-8"), args.evidence,
+                                           args.answers, current)
+            if document is not None:
+                _write_json(document, output=args.output)
+            _write_json({"valid": not errors, "errors": errors, "output": args.output if not errors else None})
+            return 0 if not errors else 1
         if args.command == "catalog" and args.catalog_command == "extract":
             current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None
             if current is not None and validate_landscape_catalog(current):

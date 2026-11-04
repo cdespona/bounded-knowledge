@@ -54,7 +54,7 @@ class LandscapeCliTest(unittest.TestCase):
         result = self.run_cli("--help")
         self.assertEqual(0, result.returncode)
         self.assertIn(
-            "{preflight,discover,validate,status,sources,evidence,candidate,questionnaire,catalog,topology}",
+            "{preflight,discover,validate,status,sources,evidence,candidate,questionnaire,stage,catalog,topology}",
             result.stdout,
         )
         self.assertEqual("", result.stderr)
