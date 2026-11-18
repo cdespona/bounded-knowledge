@@ -1,0 +1,79 @@
+# Second of three workflows chained by a run folder. Starts from the filled answer sheet (answers/answers.md),
+# synthesizes a catalog proposal at the commits the survey pinned, links configuration-backed relationships,
+# and writes the digest-bound review plus a run report that warns about commit drift. Rerunning skips steps whose
+# inputs are unchanged. A rejected digest is fixed by correcting the answers and rerunning this workflow.
+workflow:
+  name: synthesis
+  description: Record answers, synthesize and link a catalog proposal, and write the review for a run.
+  entry_point: record
+  input:
+    run:
+      type: string
+      description: Run folder whose survey finished and whose answer sheet is filled in.
+    catalog:
+      type: string
+      description: Current canonical catalog; ids of same-named concepts are adopted from it.
+      default: catalog/landscape-catalog.json
+  limits:
+    max_iterations: 10
+    timeout_seconds: 3600
+
+agents:
+  - name: record
+    type: script
+    command: ./tools/landscape
+    args: [run, record, "{{ workflow.input.run }}"]
+    routes:
+      - to: prepare
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: prepare
+    type: script
+    command: ./tools/landscape
+    args: [stage, prepare, synthesis, --run, "{{ workflow.input.run }}", --current, "{{ workflow.input.catalog }}"]
+    routes:
+      - to: link
+        when: "{{ output.exit_code == 0 and output.upToDate }}"
+      - to: run
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: run
+    type: script
+    command: ./tools/landscape
+    args: [stage, run, --run, "{{ workflow.input.run }}", --stage, synthesis]
+    timeout: 320
+    routes:
+      - to: $end
+        when: "{{ output.exit_code == 3 }}"
+      - to: check
+
+  - name: check
+    type: script
+    command: ./tools/landscape
+    args: [stage, check, synthesis, --run, "{{ workflow.input.run }}", --current, "{{ workflow.input.catalog }}"]
+    routes:
+      - to: link
+        when: "{{ output.exit_code == 0 }}"
+      - to: run
+
+  - name: link
+    type: script
+    command: ./tools/landscape
+    args: [run, link, "{{ workflow.input.run }}"]
+    routes:
+      - to: review
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: review
+    type: script
+    command: ./tools/landscape
+    args: [run, review, "{{ workflow.input.run }}", --catalog, "{{ workflow.input.catalog }}"]
+    routes:
+      - to: $end
+
+output:
+  reviewed: "{{ review.output.exit_code == 0 if review is defined else false }}"
+  report: "{{ review.output.stdout if review is defined else '' }}"

@@ -1,21 +1,16 @@
-# Sequences the human-gated path from a linked catalog proposal to promotion.
-# Validation, the review digest, the approval record and the single catalog writer are `landscape catalog` commands;
-# this file only routes. The first gate option is the safe one, so `--skip-gates` can never approve.
-# Run from the repository root. Evidence paths are space separated and must not contain spaces.
+# Third of three workflows chained by a run folder: gate on a human approval of the review digest, then promote.
+# Validation, the review digest, the approval record and the single catalog writer are `landscape` commands;
+# this file only routes. The first option of every gate is the safe one, so `--skip-gates` can never approve.
+# The approver's name and digest are entered at the gates; `catalog approve` stamps the approval time.
+# Run from the repository root.
 workflow:
   name: promotion
-  description: Validate, review, gate on a human approval of the review digest, then promote.
-  entry_point: validate
+  description: Gate on a human approval of a run's review digest, then promote its linked proposal.
+  entry_point: approval_gate
   input:
-    proposal:
+    run:
       type: string
-      description: Linked catalog proposal JSON.
-    draft:
-      type: string
-      description: Answered questionnaire draft the proposal cites.
-    evidence:
-      type: string
-      description: Space separated evidence bundle JSON paths.
+      description: Run folder whose synthesis wrote review/review.md.
     catalog:
       type: string
       description: Canonical catalog to promote into.
@@ -24,59 +19,42 @@ workflow:
       type: string
       description: Directory for promotion records.
       default: catalog/promotions
-    review:
-      type: string
-      description: Where to write the Markdown review.
-    approval:
-      type: string
-      description: Where to write the approval record.
-    approver:
-      type: string
-      description: Name recorded as the approver.
-    approved_at:
-      type: string
-      description: ISO 8601 approval time with timezone.
   limits:
-    max_iterations: 8
+    max_iterations: 6
     timeout_seconds: 7200
 
 agents:
-  - name: validate
-    type: script
-    command: sh
-    args: [-c, 'exec ./tools/landscape catalog propose-validate "$0" --draft "$1" --evidence $2', "{{ workflow.input.proposal }}", "{{ workflow.input.draft }}", "{{ workflow.input.evidence }}"]
-    routes:
-      - to: review
-        when: "{{ output.exit_code == 0 }}"
-      - to: $end
-
-  - name: review
-    type: script
-    command: ./tools/landscape
-    args: [catalog, review, "{{ workflow.input.proposal }}", --current, "{{ workflow.input.catalog }}", --draft, "{{ workflow.input.draft }}", --output, "{{ workflow.input.review }}"]
-    routes:
-      - to: approval_gate
-        when: "{{ output.exit_code == 0 }}"
-      - to: $end
-
   - name: approval_gate
     type: human_gate
     prompt: |
-      Read {{ workflow.input.review }}. Approving binds your approval to the digest printed on its last line,
-      so type that digest exactly. Nothing is promoted without it.
+      Read {{ workflow.input.run }}/review/review.md and the commit-drift warnings in
+      {{ workflow.input.run }}/review/run-report.md. Approving binds your approval to the digest printed on the
+      review's last line, so type that digest exactly. Nothing is promoted without it.
     options:
       - label: Reject or stop here
         value: reject
         route: $end
       - label: Approve and promote
         value: approve
-        route: approve
+        route: approver_gate
         prompt_for: digest
+
+  - name: approver_gate
+    type: human_gate
+    prompt: Who is approving? Your name is recorded in the approval and promotion records.
+    options:
+      - label: Stop without approving
+        value: reject
+        route: $end
+      - label: Record my name and approve
+        value: approve
+        route: approve
+        prompt_for: approver
 
   - name: approve
     type: script
     command: ./tools/landscape
-    args: [catalog, approve, "{{ workflow.input.proposal }}", --draft, "{{ workflow.input.draft }}", --current, "{{ workflow.input.catalog }}", --reviewed, "{{ approval_gate.output.additional_input.digest }}", --by, "{{ workflow.input.approver }}", --at, "{{ workflow.input.approved_at }}", --output, "{{ workflow.input.approval }}"]
+    args: [catalog, approve, --run, "{{ workflow.input.run }}", --current, "{{ workflow.input.catalog }}", --reviewed, "{{ approval_gate.output.additional_input.digest }}", --by, "{{ approver_gate.output.additional_input.approver }}"]
     routes:
       - to: promote
         when: "{{ output.exit_code == 0 }}"
@@ -84,8 +62,8 @@ agents:
 
   - name: promote
     type: script
-    command: sh
-    args: [-c, 'exec ./tools/landscape catalog promote "$0" --approval "$1" --draft "$2" --catalog "$3" --promotions "$4" --evidence $5', "{{ workflow.input.proposal }}", "{{ workflow.input.approval }}", "{{ workflow.input.draft }}", "{{ workflow.input.catalog }}", "{{ workflow.input.promotions }}", "{{ workflow.input.evidence }}"]
+    command: ./tools/landscape
+    args: [catalog, promote, --run, "{{ workflow.input.run }}", --catalog, "{{ workflow.input.catalog }}", --promotions, "{{ workflow.input.promotions }}"]
     routes:
       - to: $end
 

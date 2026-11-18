@@ -1,42 +1,49 @@
-# Sequences one repository's cartographer stage: prepare inputs, run Copilot, check, retry.
-# All parsing and validation lives in `landscape stage`; this file only routes. Run from the repository root.
+# One application of a run: discover and select evidence per selection (commits pinned once), then the
+# cartographer stage: prepare, run Copilot, check, retry. `survey.yaml` runs this once per application.
+# Every path comes from the run folder; parsing and validation live in `landscape`. Run from the repository root.
 workflow:
   name: cartographer
-  description: Produce one validated candidate profile from one evidence bundle.
-  entry_point: prepare
+  description: Pin and select evidence for one application of a run and produce its validated candidate.
+  entry_point: discover
   input:
-    evidence:
+    run:
       type: string
-      description: Path to the evidence bundle JSON.
-    analyzed_at:
+      description: Run folder created by `landscape run init`.
+    application:
       type: string
-      description: ISO 8601 timestamp used for every analyzedAt value.
-    work_dir:
-      type: string
-      description: New, empty directory for the staged inputs and captured responses.
-    candidate:
-      type: string
-      description: Where to write the validated candidate.
+      description: Application id from the run's run.json.
   limits:
-    # prepare once, then at most three run/check attempts; each run is also capped in AI credits by stage-budgets.json.
-    max_iterations: 7
+    # discover and prepare once, then at most three run/check attempts; each run is also capped in AI credits
+    # by stage-budgets.json.
+    max_iterations: 8
     timeout_seconds: 1800
 
 agents:
-  - name: prepare
+  - name: discover
     type: script
+    description: Skipped when the application was already discovered; a survey never re-pins a commit.
     command: ./tools/landscape
-    args: [stage, prepare, cartographer, --output-dir, "{{ workflow.input.work_dir }}", --evidence, "{{ workflow.input.evidence }}", --analyzed-at, "{{ workflow.input.analyzed_at }}"]
+    args: [run, discover, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
     routes:
-      - to: run
+      - to: prepare
         when: "{{ output.exit_code == 0 }}"
       - to: $end
+
+  - name: prepare
+    type: script
+    description: Reports upToDate when the candidate exists and its inputs (evidence, prompt, agent, budgets) are unchanged.
+    command: ./tools/landscape
+    args: [stage, prepare, cartographer, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
+    routes:
+      - to: $end
+        when: "{{ output.exit_code != 0 or output.upToDate }}"
+      - to: run
 
   - name: run
     type: script
     description: One read-only, credit-capped Copilot invocation; exit 3 means the cap was reached and ends the workflow, any other failure is left for the check to report.
     command: ./tools/landscape
-    args: [stage, run, "{{ workflow.input.work_dir }}", --output, "{{ workflow.input.work_dir }}/response.txt"]
+    args: [stage, run, --run, "{{ workflow.input.run }}", --stage, cartographer, --application, "{{ workflow.input.application }}"]
     timeout: 320
     routes:
       - to: $end
@@ -46,13 +53,12 @@ agents:
   - name: check
     type: script
     command: ./tools/landscape
-    args: [stage, check, cartographer, --response, "{{ workflow.input.work_dir }}/response.txt", --evidence, "{{ workflow.input.evidence }}", --output, "{{ workflow.input.candidate }}"]
+    args: [stage, check, cartographer, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
     routes:
       - to: $end
         when: "{{ output.exit_code == 0 }}"
       - to: run
 
 output:
-  prepared: "{{ prepare.output.exit_code == 0 }}"
-  valid: "{{ check.output.exit_code == 0 }}"
-  report: "{{ check.output.stdout }}"
+  application: "{{ workflow.input.application }}"
+  valid: "{{ (prepare is defined and prepare.output.upToDate) or (check is defined and check.output.exit_code == 0) }}"

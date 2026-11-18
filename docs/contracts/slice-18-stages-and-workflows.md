@@ -68,15 +68,13 @@ only `script` steps that run `./tools/landscape`, and `stage run` keeps the hard
 
 Pinned release: Conductor v0.1.44 (`microsoft/conductor`, commit `65e63232`). Run from the repository root.
 
-- `workflows/cartographer.yaml`: prepare, run, check, with at most three attempts. Verified against real evidence.
-- `workflows/promotion.yaml`: validate, review, human gate, approve, promote. The first gate option is reject, so
-  `--skip-gates` never approves. The approver types the review digest; it is passed to `catalog approve --reviewed`.
-  Verified on a throwaway catalog: the reject path writes nothing; the approve path promotes.
+Slice 19 replaced the original two workflows with three workflows chained by a run folder (`survey.yaml`,
+`synthesis.yaml`, `promotion.yaml`) plus `cartographer.yaml` as the per-application sub-workflow. See
+`slice-19-run-folders.md`. The `stage` commands above keep their explicit-path form for tests and manual use, and
+take `--run` instead inside workflows.
 
 Limits:
 
 - Cost is limited by the attempt cap (`max_iterations`) and by the per-invocation credit cap of `stage run`.
   Conductor does not meter the subprocess, and the credit cap is soft.
-- Evidence arguments of `promotion.yaml` are space separated and must not contain spaces.
-- Not orchestrated yet: discovery and evidence selection, the curator and synthesis stages, `link-config`, the
-  evidence auditor and the candidate reviser.
+- Not orchestrated yet: the evidence auditor and the candidate reviser (#30).

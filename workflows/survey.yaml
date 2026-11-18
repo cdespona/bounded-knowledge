@@ -1,0 +1,105 @@
+# First of three workflows chained by a run folder (survey -> human answers -> synthesis -> promotion).
+# Discovers and characterizes every application of the run, then builds the questionnaire and the answer sheet.
+# Stops without a questionnaire, naming the applications, if any cartographer failed; finished outputs are kept.
+# Rerunning skips every step whose output exists and whose inputs are unchanged. Run from the repository root.
+workflow:
+  name: survey
+  description: Pin, select evidence and characterize each application of a run, then write the questionnaire.
+  entry_point: check
+  input:
+    run:
+      type: string
+      description: Run folder created by `landscape run init`.
+  limits:
+    max_iterations: 12
+    timeout_seconds: 14400
+
+agents:
+  - name: check
+    type: script
+    command: ./tools/landscape
+    args: [run, check, "{{ workflow.input.run }}"]
+    routes:
+      - to: applications
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: applications
+    type: script
+    command: ./tools/landscape
+    args: [run, applications, "{{ workflow.input.run }}"]
+    routes:
+      - to: per_application
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: survey_check
+    type: script
+    description: Fails and names every application without a valid, up-to-date candidate.
+    command: ./tools/landscape
+    args: [run, survey-check, "{{ workflow.input.run }}"]
+    routes:
+      - to: curator_prepare
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: curator_prepare
+    type: script
+    command: ./tools/landscape
+    args: [stage, prepare, curator-business, --run, "{{ workflow.input.run }}"]
+    routes:
+      - to: questionnaire
+        when: "{{ output.exit_code == 0 and output.upToDate }}"
+      - to: curator_run
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+
+  - name: curator_run
+    type: script
+    command: ./tools/landscape
+    args: [stage, run, --run, "{{ workflow.input.run }}", --stage, curator-business]
+    timeout: 320
+    routes:
+      - to: $end
+        when: "{{ output.exit_code == 3 }}"
+      - to: curator_check
+
+  - name: curator_check
+    type: script
+    command: ./tools/landscape
+    args: [stage, check, curator-business, --run, "{{ workflow.input.run }}"]
+    routes:
+      - to: questionnaire
+        when: "{{ output.exit_code == 0 }}"
+      - to: curator_run
+
+  - name: questionnaire
+    type: script
+    description: Merges binding questions with the curator draft and writes answers/answers.md once.
+    command: ./tools/landscape
+    args: [run, questionnaire, "{{ workflow.input.run }}"]
+    routes:
+      - to: $end
+
+for_each:
+  - name: per_application
+    type: for_each
+    description: One cartographer sub-workflow per application; a failure does not stop the others.
+    source: applications.output.applications
+    as: application
+    # Each cartographer is a paid Copilot call.
+    max_concurrent: 2
+    failure_mode: continue_on_error
+    agent:
+      name: cartographer
+      type: workflow
+      workflow: cartographer.yaml
+      input_mapping:
+        run: "{{ workflow.input.run }}"
+        application: "{{ application }}"
+    routes:
+      - to: survey_check
+
+output:
+  failed: "{{ survey_check.output.failed if survey_check is defined else 'not reached' }}"
+  questionnaire: "{{ questionnaire.output.stdout if questionnaire is defined else '' }}"
