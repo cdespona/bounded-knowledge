@@ -17,6 +17,9 @@ from landscape_core.safety import (
 HTTP_ACTIONS = {
     "delete", "get", "head", "options", "patch", "post", "put", "query", "trace"
 }
+# Explicit, so the limit does not depend on the interpreter: Python 3.15's json parser
+# no longer raises RecursionError on deep nesting.
+MAX_JSON_DEPTH = 512
 OPENAPI_VERSION = re.compile(r"^3\.(?:0|1|2)\.[0-9]+$")
 ASYNCAPI_VERSION = re.compile(r"^(?:2|3)\.[0-9]+\.[0-9]+$")
 
@@ -32,6 +35,30 @@ def _reject_duplicate_keys(pairs):
             raise _DuplicateKey(key)
         result[key] = value
     return result
+
+
+def _json_depth_exceeds(text, limit=MAX_JSON_DEPTH):
+    """Whether arrays and objects nest deeper than limit, ignoring brackets in strings."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+        elif character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            if depth > limit:
+                return True
+        elif character in "]}":
+            depth -= 1
+    return False
 
 
 def _candidate(name):
@@ -438,6 +465,8 @@ class ApiContractDetector:
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         lines = text.splitlines() or [""]
         try:
+            if _json_depth_exceeds(text):
+                raise RecursionError
             document = json.loads(text, object_pairs_hook=_reject_duplicate_keys)
         except _DuplicateKey:
             return [self._gap(
