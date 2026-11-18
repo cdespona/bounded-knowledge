@@ -1,5 +1,6 @@
 """Deterministic checks and review diffs for untrusted model-proposed catalogs."""
 
+import copy
 import hashlib
 import json
 
@@ -130,11 +131,21 @@ def validate_catalog_proposal(proposal, draft, bundles):
     return errors
 
 
+def _without_answer_locators(item):
+    """Where a preserved answer lives is provenance of the promotion, not part of the assertion."""
+    item = copy.deepcopy(item)
+    for field in ("evidence", "counterevidence"):
+        for evidence in item["assessment"][field]:
+            if evidence.get("sourceType") == "interview" and evidence.get("locator", "").startswith("answers/"):
+                del evidence["locator"]
+    return item
+
+
 def _entities(document):
     result = {}
     for collection in list(CATALOG_COLLECTION_TYPES) + ["relationships"]:
         for item in document[collection]:
-            result[(collection, item["id"])] = item
+            result[(collection, item["id"])] = _without_answer_locators(item)
     return result
 
 
