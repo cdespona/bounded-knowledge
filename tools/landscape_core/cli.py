@@ -20,6 +20,7 @@ from .binding_questions import generate_binding_questions
 from .promotion import build_approval, promote, serialize
 from .catalog_ids import convention_errors
 from .stages import CAP_EXIT_CODE, STAGE_AGENTS, check_stage, prepare_stage, run_stage, usage_totals
+from . import runs
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
@@ -159,16 +160,20 @@ def build_parser():
     stage_subparsers = stage_parser.add_subparsers(dest="stage_command", required=True)
     stage_prepare_parser = stage_subparsers.add_parser("prepare", help="stage the inputs and prompt of one stage")
     stage_prepare_parser.add_argument("stage", choices=sorted(STAGE_AGENTS))
-    stage_prepare_parser.add_argument("--output-dir", required=True)
-    stage_prepare_parser.add_argument("--evidence", required=True, nargs="+")
+    stage_prepare_parser.add_argument("--output-dir")
+    stage_prepare_parser.add_argument("--evidence", nargs="+")
+    _run_options(stage_prepare_parser)
     stage_prepare_parser.add_argument("--candidate", nargs="+", default=[])
     stage_prepare_parser.add_argument("--answers")
     stage_prepare_parser.add_argument("--analyzed-at")
     stage_prepare_parser.add_argument("--respondent-id", default="technical-lead")
     stage_prepare_parser.add_argument("--respondent-role", default="technical lead")
+    stage_prepare_parser.add_argument("--current", help="with --run: the catalog synthesis adopts ids from")
     stage_run_parser = stage_subparsers.add_parser("run", help="run the Copilot agent of a prepared stage once")
-    stage_run_parser.add_argument("stage_dir")
-    stage_run_parser.add_argument("--output", required=True)
+    stage_run_parser.add_argument("stage_dir", nargs="?")
+    stage_run_parser.add_argument("--output")
+    stage_run_parser.add_argument("--stage", choices=sorted(STAGE_AGENTS), help="with --run: which stage folder to run")
+    _run_options(stage_run_parser)
     stage_run_parser.add_argument("--timeout", type=int, default=290)
     stage_run_parser.add_argument("--max-ai-credits", type=int, help="override the stage budget (minimum 30)")
     stage_run_parser.add_argument("--model", help="override the stage model")
@@ -176,11 +181,12 @@ def build_parser():
     stage_usage_parser.add_argument("stage_dirs", nargs="+")
     stage_check_parser = stage_subparsers.add_parser("check", help="extract and validate a captured stage response")
     stage_check_parser.add_argument("stage", choices=sorted(STAGE_AGENTS))
-    stage_check_parser.add_argument("--response", required=True)
-    stage_check_parser.add_argument("--evidence", required=True, nargs="+")
+    stage_check_parser.add_argument("--response")
+    stage_check_parser.add_argument("--evidence", nargs="+")
     stage_check_parser.add_argument("--answers")
     stage_check_parser.add_argument("--current")
-    stage_check_parser.add_argument("--output", required=True)
+    stage_check_parser.add_argument("--output")
+    _run_options(stage_check_parser)
     catalog_parser = subparsers.add_parser(
         "catalog", help="validate canonical landscape knowledge"
     )
@@ -224,22 +230,24 @@ def build_parser():
     catalog_approve_parser = catalog_subparsers.add_parser(
         "approve", help="record a human approval bound to the digest of a proposal review"
     )
-    catalog_approve_parser.add_argument("proposal")
-    catalog_approve_parser.add_argument("--draft", required=True)
+    catalog_approve_parser.add_argument("proposal", nargs="?")
+    catalog_approve_parser.add_argument("--draft")
     catalog_approve_parser.add_argument("--current")
     catalog_approve_parser.add_argument("--reviewed", required=True, help="digest printed at the end of the review")
     catalog_approve_parser.add_argument("--by", required=True)
-    catalog_approve_parser.add_argument("--at", required=True)
-    catalog_approve_parser.add_argument("--output", required=True)
+    catalog_approve_parser.add_argument("--at", help="approval time; with --run it defaults to now")
+    catalog_approve_parser.add_argument("--output")
+    catalog_approve_parser.add_argument("--run", help="run folder; derives proposal, draft, current and output")
     catalog_promote_parser = catalog_subparsers.add_parser(
         "promote", help="write an approved proposal into the canonical catalog"
     )
-    catalog_promote_parser.add_argument("proposal")
-    catalog_promote_parser.add_argument("--approval", required=True)
-    catalog_promote_parser.add_argument("--draft", required=True)
-    catalog_promote_parser.add_argument("--evidence", required=True, nargs="+")
+    catalog_promote_parser.add_argument("proposal", nargs="?")
+    catalog_promote_parser.add_argument("--approval")
+    catalog_promote_parser.add_argument("--draft")
+    catalog_promote_parser.add_argument("--evidence", nargs="+")
     catalog_promote_parser.add_argument("--catalog", required=True)
     catalog_promote_parser.add_argument("--promotions", required=True)
+    catalog_promote_parser.add_argument("--run", help="run folder; derives proposal, approval, draft and evidence")
     catalog_promote_parser.add_argument("--dry-run", action="store_true")
 
     topology_parser = subparsers.add_parser(
@@ -260,7 +268,83 @@ def build_parser():
     topology_infer_parser.add_argument("topology")
     topology_infer_parser.add_argument("--catalog", required=True)
     topology_infer_parser.add_argument("--output", required=True)
+
+    run_parser = subparsers.add_parser("run", help="create and advance a run folder")
+    run_subparsers = run_parser.add_subparsers(dest="run_command", required=True)
+    run_init_parser = run_subparsers.add_parser("init", help="create a run folder for human-chosen applications")
+    run_init_parser.add_argument("name", type=_repository_id)
+    run_init_parser.add_argument("--topology", required=True)
+    run_init_parser.add_argument("--application", required=True, action="append", type=_repository_id)
+    run_init_parser.add_argument("--sources", default="sources.json")
+    run_init_parser.add_argument("--respondent-id", default="technical-lead")
+    run_init_parser.add_argument("--respondent-role", default="technical lead")
+    run_init_parser.add_argument("--runs-dir", default=str(runs.RUNS_DIR))
+    run_init_parser.add_argument("--created-at", help="ISO 8601 time with timezone; defaults to now")
+    for name, text in (("check", "validate a run folder and list its artifacts"),
+                       ("applications", "print the run's application ids as JSON"),
+                       ("survey-check", "fail and name every application without a valid candidate"),
+                       ("questionnaire", "build the questionnaire and write the answer sheet once"),
+                       ("link", "add configuration-backed relationships and validate the proposal")):
+        run_subparsers.add_parser(name, help=text).add_argument("run")
+    run_discover_parser = run_subparsers.add_parser("discover", help="discover and select evidence for one application")
+    run_discover_parser.add_argument("run")
+    run_discover_parser.add_argument("--application", required=True, type=_repository_id)
+    run_record_parser = run_subparsers.add_parser("record", help="record the filled answer sheet")
+    run_record_parser.add_argument("run")
+    run_record_parser.add_argument("--recorded-at")
+    run_review_parser = run_subparsers.add_parser("review", help="write the review and the run report")
+    run_review_parser.add_argument("run")
+    run_review_parser.add_argument("--catalog", default=str(runs.DEFAULT_CATALOG))
     return parser
+
+
+def _run_options(parser):
+    parser.add_argument("--run", help="run folder; derives every path from it (exclusive with explicit paths)")
+    parser.add_argument("--application", type=_repository_id, help="with --run: the application (cartographer only)")
+
+
+def _exclusive(args, explicit):
+    given = [name for name in explicit if getattr(args, name) not in (None, [], False)]
+    if args.run and given:
+        raise ValueError("--run replaces {}; pass one or the other".format(", ".join("--" + name.replace("_", "-") for name in given)))
+
+
+def _run_command(args):
+    if args.run_command == "init":
+        _write_json(runs.init_run(args.name, args.topology, args.application, args.sources, args.respondent_id,
+                                  args.respondent_role, args.runs_dir, args.created_at))
+        return 0
+    if args.run_command == "check":
+        result = runs.check_run(args.run)
+        _write_json(result)
+        return 0 if result["valid"] else 1
+    if args.run_command == "applications":
+        _write_json(runs.run_applications(args.run))
+        return 0
+    if args.run_command == "discover":
+        _write_json(runs.discover_application(args.run, args.application))
+        return 0
+    if args.run_command == "survey-check":
+        result = runs.survey_failures(args.run)
+        _write_json(result)
+        if result["failed"]:
+            print("error: the survey stops; no valid candidate for: {}".format(", ".join(result["failed"])), file=sys.stderr)
+            return 1
+        return 0
+    if args.run_command == "questionnaire":
+        _write_json(runs.build_questionnaire(args.run))
+        return 0
+    if args.run_command == "record":
+        _write_json(runs.record_run_answers(args.run, args.recorded_at))
+        return 0
+    if args.run_command == "link":
+        _write_json(runs.link_run(args.run))
+        return 0
+    if args.run_command == "review":
+        result = runs.review_run(args.run, args.catalog)
+        _write_json(result)
+        return 0
+    raise ValueError("unknown run command")
 
 
 def main(argv=None):
@@ -400,11 +484,24 @@ def main(argv=None):
             _write_json({"valid": not errors, "errors": errors})
             return 0 if not errors else 1
 
+        if args.command == "stage" and args.stage_command == "prepare" and args.run:
+            _exclusive(args, ["output_dir", "evidence", "candidate", "answers", "analyzed_at"])
+            _write_json(runs.prepare_run_stage(args.run, args.stage, args.application, getattr(args, "current", None)))
+            return 0
         if args.command == "stage" and args.stage_command == "prepare":
+            if not (args.output_dir and args.evidence):
+                raise ValueError("stage prepare needs --run, or --output-dir and --evidence")
             _write_json(prepare_stage(args.stage, args.output_dir, args.evidence, args.candidate, args.answers,
                                       args.analyzed_at, args.respondent_id, args.respondent_role))
             return 0
         if args.command == "stage" and args.stage_command == "run":
+            if args.run:
+                _exclusive(args, ["stage_dir", "output"])
+                if not args.stage:
+                    raise ValueError("stage run --run needs --stage")
+                args.stage_dir, args.output = runs.run_stage_dir(args.run, args.stage, args.application)
+            elif not (args.stage_dir and args.output):
+                raise ValueError("stage run needs --run and --stage, or a stage directory and --output")
             outcome = run_stage(args.stage_dir, args.output, args.timeout, max_ai_credits=args.max_ai_credits,
                                 model=args.model)
             _write_json(outcome)
@@ -416,7 +513,14 @@ def main(argv=None):
         if args.command == "stage" and args.stage_command == "usage":
             _write_json(usage_totals(args.stage_dirs))
             return 0
+        if args.command == "stage" and args.stage_command == "check" and args.run:
+            _exclusive(args, ["response", "evidence", "answers", "output"])
+            document, errors, output = runs.check_run_stage(args.run, args.stage, args.application, args.current)
+            _write_json({"valid": not errors, "errors": errors, "output": str(output) if not errors else None})
+            return 0 if not errors else 1
         if args.command == "stage" and args.stage_command == "check":
+            if not (args.response and args.evidence and args.output):
+                raise ValueError("stage check needs --run, or --response, --evidence and --output")
             current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None
             document, errors = check_stage(args.stage, Path(args.response).read_text(encoding="utf-8"), args.evidence,
                                            args.answers, current)
@@ -461,7 +565,15 @@ def main(argv=None):
             Path(args.output).write_text(render_catalog_review(proposal, current, draft), encoding="utf-8")
             return 0
 
+        if args.command == "catalog" and args.catalog_command == "approve" and args.run:
+            _exclusive(args, ["proposal", "draft", "output"])
+            run = runs.Run(args.run)
+            args.proposal, args.draft, args.output = run.linked_proposal, run.answers, run.approval
+            args.current = args.current or str(runs.DEFAULT_CATALOG)
+            args.at = args.at or runs.now()
         if args.command == "catalog" and args.catalog_command == "approve":
+            if not (args.proposal and args.draft and args.output and args.at):
+                raise ValueError("catalog approve needs --run, or a proposal with --draft, --at and --output")
             proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
             draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
             current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current and Path(args.current).exists() else None
@@ -469,7 +581,14 @@ def main(argv=None):
             Path(args.output).parent.mkdir(parents=True, exist_ok=True)
             Path(args.output).write_text(serialize(approval), encoding="utf-8")
             return 0
+        if args.command == "catalog" and args.catalog_command == "promote" and args.run:
+            _exclusive(args, ["proposal", "approval", "draft", "evidence"])
+            run = runs.Run(args.run)
+            args.proposal, args.approval, args.draft = run.linked_proposal, run.approval, run.answers
+            args.evidence = [str(path) for path in run.all_evidence()]
         if args.command == "catalog" and args.catalog_command == "promote":
+            if not (args.proposal and args.approval and args.draft and args.evidence):
+                raise ValueError("catalog promote needs --run, or a proposal with --approval, --draft and --evidence")
             proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
             draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
             approval = json.loads(Path(args.approval).read_text(encoding="utf-8"))
@@ -477,6 +596,8 @@ def main(argv=None):
             _write_json(promote(proposal, draft, bundles, approval, Path(args.catalog), Path(args.promotions), args.dry_run))
             return 0
 
+        if args.command == "run":
+            return _run_command(args)
         if args.command == "topology" and args.topology_command == "infer-bindings":
             topology = json.loads(Path(args.topology).read_text(encoding="utf-8"))
             catalog = json.loads(Path(args.catalog).read_text(encoding="utf-8"))

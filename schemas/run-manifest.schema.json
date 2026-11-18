@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercurio.local/schemas/run-manifest.schema.json",
+  "title": "Landscape run manifest",
+  "description": "run.json of a run folder. Written once by `landscape run init` and never changed; the only list of applications a run's workflows use.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "name",
+    "createdAt",
+    "respondent",
+    "applications"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "name": {
+      "description": "Folder name: <date>-<identifier>.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "createdAt": {
+      "description": "ISO 8601 time with timezone; every analyzedAt value of the run.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "respondent": {
+      "type": "object",
+      "required": ["id", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1}
+      }
+    },
+    "applications": {
+      "description": "Sorted by id. Each application has exactly one selection of kind application.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "selections"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"$ref": "#/$defs/identifier"},
+          "selections": {
+            "description": "Topology selections bound to the application, sorted by id.",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "kind", "repository", "subpath"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"$ref": "#/$defs/identifier"},
+                "kind": {"enum": ["application", "kubernetes", "terraform"]},
+                "repository": {"$ref": "#/$defs/identifier"},
+                "subpath": {"type": "string", "minLength": 1}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    }
+  }
+}
