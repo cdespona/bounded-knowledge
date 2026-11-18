@@ -34,7 +34,7 @@ slice delivers or newly defers a capability.
 
 ## Deterministic commands
 
-The tooling requires Python 3.9 or later and Git. Install the pinned dependencies from
+The tooling requires Python 3.11 or later and Git. Install the pinned dependencies from
 `requirements.txt` before running discovery or tests. Kubernetes YAML inventory uses
 `PyYAML==6.0.2`; Terraform and Terragrunt inventory uses `python-hcl2==8.1.4` with
 constrained parser dependencies. The other detectors use the Python standard library.
