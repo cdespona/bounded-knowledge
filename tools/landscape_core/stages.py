@@ -21,6 +21,7 @@ from .safety import COPILOT_CONFIGURATION_DIRECTORIES, COPILOT_INSTRUCTION_NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "workflows" / "prompts"
+BUDGETS = ROOT / "workflows" / "stage-budgets.json"
 AGENTS = ROOT / ".github" / "agents"
 STAGE_AGENTS = {"cartographer": "repository-cartographer", "curator-business": "questionnaire-curator",
                 "synthesis": "catalog-synthesizer"}
@@ -32,6 +33,9 @@ CUSTOMIZATION_DIRECTORIES = tuple(COPILOT_CONFIGURATION_DIRECTORIES) + (
     ".github/prompts", ".github/chatmodes", ".github/hooks", ".github/copilot", ".copilot", ".claude", ".agents",
     ".vscode", ".cursor", ".gemini")
 CUSTOMIZATION_NAMES = set(COPILOT_INSTRUCTION_NAMES) | {"mcp.json", ".mcp.json", "mcp-config.json"}
+NANO_PER_CREDIT = 1_000_000_000  # unconfirmed: the report gives totalNanoAiu; 1 AI credit = 1e9 nano is assumed
+USAGE_FILE = "usage.json"
+CAP_EXIT_CODE = 3
 CUSTOMIZATION_SUFFIXES = (".instructions.md", ".prompt.md", ".agent.md", ".chatmode.md")
 
 
@@ -182,7 +186,47 @@ def stage_customization_errors(stage_dir):
     return sorted(errors)
 
 
-def copilot_command(stage_dir, executable="copilot"):
+def load_budgets(path=BUDGETS):
+    """Read and validate the checked-in per-stage budgets: {minimum, {stage: (model or None, maxAiCredits)}}."""
+    document = _load(path)
+    minimum = document.get("minMaxAiCredits")
+    if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 30:
+        raise ValueError("{}: minMaxAiCredits must be an integer of at least 30".format(path))
+    stages = document.get("stages")
+    if not isinstance(stages, dict) or set(stages) != set(STAGE_AGENTS):
+        raise ValueError("{}: stages must configure exactly {}".format(path, ", ".join(sorted(STAGE_AGENTS))))
+    budgets = {}
+    for stage, entry in stages.items():
+        credits, model = entry.get("maxAiCredits") if isinstance(entry, dict) else None, entry.get("model") if isinstance(entry, dict) else None
+        if set(entry) - {"maxAiCredits", "model"} or not isinstance(credits, int) or isinstance(credits, bool) \
+                or credits < minimum or not (model is None or (isinstance(model, str) and model)):
+            raise ValueError("{}: invalid budget for {}".format(path, stage))
+        budgets[stage] = (model, credits)
+    return minimum, budgets
+
+
+def stage_of(stage_dir):
+    """The stage name of a prepared stage directory, from its one agent file."""
+    agents = sorted((Path(stage_dir) / ".github" / "agents").glob("*.agent.md"))
+    names = {agent: stage for stage, agent in STAGE_AGENTS.items()}
+    if len(agents) != 1 or agents[0].name[:-len(".agent.md")] not in names:
+        raise ValueError("{} is not a prepared stage directory".format(stage_dir))
+    return names[agents[0].name[:-len(".agent.md")]]
+
+
+def resolve_budget(stage_dir, max_ai_credits=None, model=None):
+    """Return (model or None, maxAiCredits) from the checked-in budget plus overrides; enforces the minimum."""
+    minimum, budgets = load_budgets()
+    default_model, default_credits = budgets[stage_of(stage_dir)]
+    credits = default_credits if max_ai_credits is None else max_ai_credits
+    if not isinstance(credits, int) or isinstance(credits, bool) or credits < minimum:
+        raise ValueError("--max-ai-credits must be an integer of at least {}".format(minimum))
+    if model is not None and not model.strip():
+        raise ValueError("--model must not be empty")
+    return (model or default_model), credits
+
+
+def copilot_command(stage_dir, executable="copilot", max_ai_credits=None, model=None):
     """Build the Copilot invocation for a prepared stage; refuses a directory that was not prepared or that
     carries any customization besides its one agent file."""
     stage_dir = Path(stage_dir)
@@ -197,13 +241,55 @@ def copilot_command(stage_dir, executable="copilot"):
     agent = agents[0].name[:-len(".agent.md")]
     if agent not in STAGE_AGENTS.values():
         raise ValueError("unknown agent {}".format(agent))
-    return [executable, "-C", str(stage_dir), "--agent", agent, *COPILOT_FLAGS,
+    model, credits = resolve_budget(stage_dir, max_ai_credits, model)
+    budget = ["--max-ai-credits", str(credits), "--usage-output-file", str(stage_dir / USAGE_FILE)]
+    if model:
+        budget += ["--model", model]
+    return [executable, "-C", str(stage_dir), "--agent", agent, *COPILOT_FLAGS, *budget,
             "--prompt", prompt_file.read_text(encoding="utf-8").strip()]
 
 
-def run_stage(stage_dir, output, timeout=290, executable="copilot"):
-    """Run the prepared stage's agent once and capture its response; return the process outcome."""
-    command = copilot_command(stage_dir, executable)
+def read_usage(path):
+    """Parse a Copilot usage report defensively. Returns {"status", "credits", "models", "notes"}.
+
+    status is "complete" (Copilot says all credits were counted), "incomplete" (it says otherwise),
+    "missing", "malformed" or "unrecognized" (no known fields). Nothing is guessed: unknown shapes give
+    credits None and a note.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return {"status": "missing", "credits": None, "models": {}, "notes": ["usage file was not written"]}
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {"status": "malformed", "credits": None, "models": {}, "notes": ["usage file is not valid JSON"]}
+    metrics = document.get("modelMetrics") if isinstance(document, dict) else None
+    total = document.get("totalNanoAiu") if isinstance(document, dict) else None
+    number = lambda value: isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0  # noqa: E731
+    if not isinstance(metrics, dict) or not number(total) or not all(
+            isinstance(item, dict) and number(item.get("totalNanoAiu")) for item in metrics.values()):
+        return {"status": "unrecognized", "credits": None, "models": {},
+                "notes": ["usage file lacks totalNanoAiu or modelMetrics.<model>.totalNanoAiu"]}
+    models = {name: round(item["totalNanoAiu"] / NANO_PER_CREDIT, 3) for name, item in sorted(metrics.items())}
+    reported = document.get("aiCreditsStatus")
+    statuses = {reported} | {item.get("aiCreditsStatus") for item in metrics.values()}
+    notes = []
+    if statuses != {"complete"}:
+        notes.append("aiCreditsStatus is {}, not complete".format(", ".join(sorted(str(item) for item in statuses))))
+    return {"status": "complete" if not notes else "incomplete", "credits": round(total / NANO_PER_CREDIT, 3),
+            "models": models, "notes": notes}
+
+
+def run_stage(stage_dir, output, timeout=290, executable="copilot", max_ai_credits=None, model=None):
+    """Run the prepared stage's agent once, capture its response and usage; return the outcome.
+
+    The outcome's capReached is true when the usage report shows the credit cap was used up or its credit
+    status is not "complete", or when Copilot failed and said so; such a response is never a success.
+    """
+    command = copilot_command(stage_dir, executable, max_ai_credits, model)
+    used_model, cap = resolve_budget(stage_dir, max_ai_credits, model)
+    usage_file = Path(stage_dir).resolve() / USAGE_FILE
+    usage_file.unlink(missing_ok=True)  # a stale report from an earlier attempt must not be read
     target = Path(output)
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -213,7 +299,35 @@ def run_stage(stage_dir, output, timeout=290, executable="copilot"):
         code, response, errors = -1, "", "timed out after {}s".format(timeout)
     target.write_text(response, encoding="utf-8")
     target.with_suffix(".stderr.txt").write_text(errors, encoding="utf-8")
-    return {"exitCode": code, "response": str(target), "responseBytes": len(response.encode("utf-8"))}
+    usage = read_usage(usage_file)
+    said_so = code != 0 and re.search(r"credit|usage limit|budget", errors, re.IGNORECASE) is not None
+    reached = said_so or usage["status"] == "incomplete" or (
+        usage["credits"] is not None and usage["credits"] >= cap)
+    summary = {"creditsUsed": usage["credits"], "cap": cap, "model": used_model, "models": usage["models"],
+               "status": usage["status"], "notes": usage["notes"], "file": str(usage_file) if usage_file.is_file() else None}
+    return {"exitCode": code, "response": str(target), "responseBytes": len(response.encode("utf-8")),
+            "usage": summary, "capReached": reached}
+
+
+def usage_totals(stage_dirs):
+    """Sum the usage reports of prepared stage directories by stage and model; stable, sorted output."""
+    stages, problems, total = {}, [], 0.0
+    for stage_dir in stage_dirs:
+        stage = stage_of(stage_dir)
+        usage = read_usage(Path(stage_dir) / USAGE_FILE)
+        if usage["credits"] is None:
+            problems.append({"stageDir": str(stage_dir), "status": usage["status"], "notes": usage["notes"]})
+            continue
+        if usage["notes"]:
+            problems.append({"stageDir": str(stage_dir), "status": usage["status"], "notes": usage["notes"]})
+        entry = stages.setdefault(stage, {"runs": 0, "credits": 0.0, "models": {}})
+        entry["runs"] += 1
+        entry["credits"] = round(entry["credits"] + usage["credits"], 3)
+        for name, credits in usage["models"].items():
+            entry["models"][name] = round(entry["models"].get(name, 0.0) + credits, 3)
+        total = round(total + usage["credits"], 3)
+    return {"stages": {name: stages[name] for name in sorted(stages)}, "totalCredits": total,
+            "problems": sorted(problems, key=lambda item: item["stageDir"])}
 
 
 def check_stage(stage, response, evidence, answers=None, current=None):

@@ -13,7 +13,8 @@ ROOT = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 
 from landscape_core.stages import (  # noqa: E402
-    COPILOT_FLAGS, check_stage, copilot_command, prepare_stage, render, run_stage, stage_customization_errors)
+    COPILOT_FLAGS, CAP_EXIT_CODE, check_stage, copilot_command, load_budgets, prepare_stage, read_usage, render, run_stage,
+    stage_customization_errors, usage_totals)
 
 CONTRACTS = ROOT / "examples" / "contracts"
 
@@ -23,7 +24,7 @@ def write(path, document):
     return str(path)
 
 
-class StageTests(unittest.TestCase):
+class StageBase(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.base = Path(self.directory.name)
@@ -37,6 +38,9 @@ class StageTests(unittest.TestCase):
 
     def prepare(self, name="carto"):
         return prepare_stage("cartographer", self.base / name, [self.evidence], analyzed_at="2026-10-29T10:00:00Z")
+
+
+class StageTests(StageBase):
 
     def test_prepare_stages_inputs_prompt_agent_and_digests(self):
         outcome = self.prepare()
@@ -149,6 +153,132 @@ class StageTests(unittest.TestCase):
         document, errors = check_stage("cartographer", json.dumps(other), [self.evidence])
         self.assertIsNone(document)
         self.assertTrue(errors)
+
+
+SAMPLE_USAGE = CONTRACTS / "copilot-usage.sample.json"
+
+
+class UsageTests(StageBase):
+    def fake(self, usage=None, exit_code=0, stderr=""):
+        """A fake copilot that records its arguments and writes ``usage`` to the --usage-output-file."""
+        fake = self.base / "fake-copilot"
+        lines = ["#!/bin/sh", "printf '%s\\n' \"$@\" > '{}'".format(self.base / "args.txt"),
+                 "while [ $# -gt 0 ]; do [ \"$1\" = --usage-output-file ] && out=\"$2\"; shift; done"]
+        if usage is not None:
+            lines.append("cat > \"$out\" <<'EOF'\n{}\nEOF".format(usage))
+        lines += ["echo '{}'", "echo '{}' >&2".format(stderr), "exit {}".format(exit_code)]
+        fake.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        return str(fake)
+
+    def run_it(self, name="carto", **options):
+        stage = self.prepare(name)["stageDir"]
+        return stage, run_stage(stage, self.base / name / "out" / "response.txt", 10, **options)
+
+    def test_budgets_file_is_valid_and_covers_every_stage(self):
+        minimum, budgets = load_budgets()
+        self.assertEqual(minimum, 30)
+        self.assertEqual(set(budgets), {"cartographer", "curator-business", "synthesis"})
+        self.assertTrue(all(credits >= 30 for _, credits in budgets.values()))
+
+    def test_command_passes_budget_usage_file_and_model_after_the_hardened_flags(self):
+        stage = Path(self.prepare()["stageDir"])
+        command = copilot_command(stage)
+        start = 5 + len(COPILOT_FLAGS)
+        self.assertEqual(command[start:start + 4], ["--max-ai-credits", "60", "--usage-output-file", str(stage.resolve() / "usage.json")])
+        self.assertNotIn("--model", command)
+        command = copilot_command(stage, max_ai_credits=45, model="some-model")
+        self.assertEqual(command[start:start + 6], ["--max-ai-credits", "45", "--usage-output-file",
+                                                    str(stage.resolve() / "usage.json"), "--model", "some-model"])
+
+    def test_minimum_is_enforced_for_overrides(self):
+        stage = self.prepare()["stageDir"]
+        for bad in (29, 0, -5):
+            with self.assertRaisesRegex(ValueError, "at least 30"):
+                copilot_command(stage, max_ai_credits=bad)
+        with self.assertRaises(ValueError):
+            copilot_command(stage, model=" ")
+        self.assertIn("30", copilot_command(stage, max_ai_credits=30))
+
+    def test_run_stores_and_summarizes_usage(self):
+        _, outcome = self.run_it(executable=self.fake(SAMPLE_USAGE.read_text(encoding="utf-8")), max_ai_credits=30, model="m")
+        self.assertEqual(outcome["exitCode"], 0)
+        self.assertFalse(outcome["capReached"])
+        self.assertEqual(outcome["usage"]["cap"], 30)
+        self.assertEqual(outcome["usage"]["model"], "m")
+        self.assertEqual(outcome["usage"]["creditsUsed"], 3.275)
+        self.assertEqual(outcome["usage"]["models"], {"gpt-5.3-codex": 3.275})
+        self.assertEqual(outcome["usage"]["status"], "complete")
+        self.assertTrue(Path(outcome["usage"]["file"]).is_file())
+        args = (self.base / "args.txt").read_text(encoding="utf-8").split("\n")
+        self.assertIn("--max-ai-credits", args)
+        self.assertEqual(args[args.index("--model") + 1], "m")
+
+    def test_cap_hit_is_reported_whether_the_report_or_the_exit_says_so(self):
+        capped = json.loads(SAMPLE_USAGE.read_text(encoding="utf-8"))
+        capped["aiCreditsStatus"] = "capped"
+        _, outcome = self.run_it("a", executable=self.fake(json.dumps(capped)))
+        self.assertTrue(outcome["capReached"])
+        self.assertEqual(outcome["usage"]["status"], "incomplete")
+        over = json.loads(SAMPLE_USAGE.read_text(encoding="utf-8"))
+        over["totalNanoAiu"] = 31 * 10 ** 9
+        over["modelMetrics"]["gpt-5.3-codex"]["totalNanoAiu"] = 31 * 10 ** 9
+        _, outcome = self.run_it("b", executable=self.fake(json.dumps(over)), max_ai_credits=30)
+        self.assertTrue(outcome["capReached"])
+        _, outcome = self.run_it("c", executable=self.fake(exit_code=1, stderr="AI credit limit reached"))
+        self.assertTrue(outcome["capReached"])
+
+    def test_missing_malformed_and_unrecognized_usage_is_reported_not_guessed(self):
+        _, outcome = self.run_it("a", executable=self.fake())
+        self.assertEqual((outcome["usage"]["status"], outcome["usage"]["creditsUsed"], outcome["usage"]["file"]), ("missing", None, None))
+        self.assertFalse(outcome["capReached"])
+        _, outcome = self.run_it("b", executable=self.fake("{not json"))
+        self.assertEqual(outcome["usage"]["status"], "malformed")
+        _, outcome = self.run_it("c", executable=self.fake('{"credits": 4}'))
+        self.assertEqual(outcome["usage"]["status"], "unrecognized")
+        self.assertIsNone(outcome["usage"]["creditsUsed"])
+        self.assertTrue(outcome["usage"]["notes"])
+
+    def test_a_stale_usage_file_is_not_read_after_a_rerun(self):
+        stage = self.prepare()["stageDir"]
+        (Path(stage) / "usage.json").write_text(SAMPLE_USAGE.read_text(encoding="utf-8"), encoding="utf-8")
+        outcome = run_stage(stage, self.base / "r.txt", 10, executable=self.fake())
+        self.assertEqual(outcome["usage"]["status"], "missing")
+
+    def test_cli_exits_with_the_cap_code_and_prints_a_message(self):
+        import subprocess
+        capped = json.loads(SAMPLE_USAGE.read_text(encoding="utf-8"))
+        capped["aiCreditsStatus"] = "capped"
+        stage = self.prepare()["stageDir"]
+        env = dict(os.environ, PATH=str(self.base) + os.pathsep + os.environ["PATH"])
+        self.fake(json.dumps(capped))
+        (self.base / "copilot").symlink_to(self.base / "fake-copilot")
+        done = subprocess.run([sys.executable, str(TOOLS / "landscape"), "stage", "run", stage, "--output",
+                               str(self.base / "o.txt"), "--max-ai-credits", "30"], capture_output=True, text=True, env=env)
+        self.assertEqual(done.returncode, CAP_EXIT_CODE)
+        self.assertIn("credit cap", done.stderr)
+        refused = subprocess.run([sys.executable, str(TOOLS / "landscape"), "stage", "run", stage, "--output",
+                                  str(self.base / "o.txt"), "--max-ai-credits", "5"], capture_output=True, text=True, env=env)
+        self.assertNotEqual(refused.returncode, 0)
+
+    def test_totals_sum_by_stage_and_model_and_list_problems(self):
+        usage = SAMPLE_USAGE.read_text(encoding="utf-8")
+        stages = []
+        for name in ("one", "two"):
+            stage = Path(self.prepare(name)["stageDir"])
+            (stage / "usage.json").write_text(usage, encoding="utf-8")
+            stages.append(str(stage))
+        curator = Path(prepare_stage("curator-business", self.base / "cur", [self.evidence], [self.candidate_path])["stageDir"])
+        stages.append(str(curator))  # no usage file
+        totals = usage_totals(stages)
+        self.assertEqual(totals["stages"], {"cartographer": {"runs": 2, "credits": 6.55, "models": {"gpt-5.3-codex": 6.55}}})
+        self.assertEqual(totals["totalCredits"], 6.55)
+        self.assertEqual([item["status"] for item in totals["problems"]], ["missing"])
+        self.assertEqual(usage_totals(stages), totals)
+
+    def test_read_usage_accepts_the_sanitized_real_report(self):
+        report = read_usage(SAMPLE_USAGE)
+        self.assertEqual((report["status"], report["notes"]), ("complete", []))
 
 
 if __name__ == "__main__":

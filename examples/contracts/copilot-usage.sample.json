@@ -1,0 +1,55 @@
+{
+  "aiCreditsStatus": "complete",
+  "currentModel": "gpt-5.3-codex",
+  "lastCallInputTokens": 5307,
+  "lastCallOutputTokens": 1444,
+  "modelMetrics": {
+    "gpt-5.3-codex": {
+      "aiCreditsStatus": "complete",
+      "requests": {
+        "cost": 1,
+        "count": 2
+      },
+      "tokenDetails": {
+        "cache_read": {
+          "tokenCount": 4608
+        },
+        "cache_write": {
+          "tokenCount": 0
+        },
+        "input": {
+          "tokenCount": 5483
+        },
+        "output": {
+          "tokenCount": 1596
+        }
+      },
+      "totalNanoAiu": 3274565000,
+      "usage": {
+        "cacheReadTokens": 4608,
+        "cacheWriteTokens": 0,
+        "inputTokens": 10091,
+        "outputTokens": 1596,
+        "reasoningTokens": 459
+      }
+    }
+  },
+  "tokenDetails": {
+    "cache_read": {
+      "tokenCount": 4608
+    },
+    "cache_write": {
+      "tokenCount": 0
+    },
+    "input": {
+      "tokenCount": 5483
+    },
+    "output": {
+      "tokenCount": 1596
+    }
+  },
+  "totalApiDurationMs": 23080,
+  "totalNanoAiu": 3274565000,
+  "totalPremiumRequestCost": 1,
+  "totalUserRequests": 1
+}
