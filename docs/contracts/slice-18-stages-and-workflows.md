@@ -13,7 +13,7 @@ looped on validation. This slice moves that into tested commands and lets Conduc
 | `stage usage DIR…` | Sums `usage.json` of the given stage folders by stage and model; stable, sorted JSON. Folders without a readable report are listed under `problems`. |
 | `stage check STAGE --response FILE --evidence … [--answers …] [--current CATALOG] --output FILE` | Extracts and validates a captured response with the same checks as `candidate validate`, `questionnaire assemble` and `catalog extract` plus `propose-validate`. Writes the document only when valid. |
 
-Stages are `cartographer`, `curator-business` (the business-semantics batch; runtime bindings come from
+Stages are `cartographer`, `auditor`, `reviser` (slice 20), `curator-business` (the business-semantics batch; runtime bindings come from
 `questionnaire bindings`) and `synthesis`. The questionnaire shape the curator must follow is generated from the
 evidence bundles, not pasted into the prompt by hand.
 

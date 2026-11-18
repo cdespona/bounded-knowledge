@@ -35,8 +35,10 @@ next to it. `init` refuses an existing folder: changing the application set mean
 | `run.json`, `topology.json`, `sources.json` | `run init` |
 | `survey/<app>/<selection>/inventory.json`, `evidence.json` | `run discover` (semantic evidence selection) |
 | `survey/<app>/discovery.json` | `run discover`: the commit pinned for every selection |
-| `survey/<app>/cartographer/` | the cartographer stage folder (inputs, prompt, response, usage) |
-| `survey/<app>/candidate.json` | `stage check cartographer --run`; the only per-application file the curator reads |
+| `survey/<app>/cartographer/`, `auditor/`, `reviser/` | the per-application stage folders (inputs, prompt, response, usage, attempts) |
+| `survey/<app>/cartographer-candidate.json` | `stage check cartographer --run`: the validated, unaudited candidate |
+| `survey/<app>/audit.json`, `revision.json` | `stage check auditor|reviser --run` (see slice 20) |
+| `survey/<app>/candidate.json` | `run downgrade`: the final, revised and downgraded candidate; the only per-application file the curator reads |
 | `survey/curator/`, `survey/curator-draft.json` | the curator stage |
 | `survey/bindings-draft.json` | `run questionnaire` (runtime binding questions, when there are any) |
 | `survey/questionnaire.json`, `questionnaire.md` | `run questionnaire` (bindings and curator drafts assembled) |
@@ -73,8 +75,9 @@ downstream of it.
   `continue_on_error`), then `run survey-check`. That step fails, naming every application without a valid,
   up-to-date candidate, and the survey ends there without a questionnaire. Otherwise the curator stage runs and
   `run questionnaire` writes the questionnaire and the answer sheet.
-- `cartographer.yaml` (inputs `run`, `application`): `run discover`, then prepare (skipped when fresh), run and
-  check with up to three attempts. Exit code 3 from `stage run` (credit cap) ends it.
+- `cartographer.yaml` (inputs `run`, `application`): `run discover`, then cartographer, auditor and reviser, each
+  prepare (skipped when fresh), run and check with up to three attempts, then `run downgrade` (slice 20). Exit code 3
+  from `stage run` (credit cap) ends it.
 - `synthesis.yaml` (inputs `run`, `catalog`): `run record`, the synthesis stage, `run link`, `run review`.
 - `promotion.yaml` (inputs `run`, `catalog`, `promotions`): a digest gate, an approver-name gate (the safe option
   first in both, so `--skip-gates` never approves), `catalog approve --run`, which stamps the approval time, and
@@ -94,4 +97,4 @@ error. The deterministic steps that combine many lists (`questionnaire bindings`
 - An `application` selection with a subpath other than `.` is refused (no monorepo support).
 - The drift count uses `git rev-list` on the source repository. When a repository is unreachable, the report
   says so instead of failing.
-- Answer provenance on promotion (#27) and the evidence auditor (#30) build on this layout.
+- Answer provenance on promotion (#27) builds on this layout. The evidence auditor (#30) is slice 20.

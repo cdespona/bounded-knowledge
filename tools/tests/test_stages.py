@@ -178,7 +178,9 @@ class UsageTests(StageBase):
     def test_budgets_file_is_valid_and_covers_every_stage(self):
         minimum, budgets = load_budgets()
         self.assertEqual(minimum, 30)
-        self.assertEqual(set(budgets), {"cartographer", "curator-business", "synthesis"})
+        self.assertEqual(set(budgets), {"cartographer", "auditor", "reviser", "curator-business", "synthesis"})
+        self.assertIsNotNone(budgets["auditor"][0])  # the auditor defaults to a stronger model
+        self.assertIsNone(budgets["reviser"][0])  # the reviser stays on the cartographer's model
         self.assertTrue(all(credits >= 30 for _, credits in budgets.values()))
 
     def test_command_passes_budget_usage_file_and_model_after_the_hardened_flags(self):
