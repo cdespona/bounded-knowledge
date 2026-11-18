@@ -43,8 +43,8 @@ source repositories as writable project modules.
 
 ## Development
 
-The deterministic tooling supports Python 3.9 or later and uses only the standard
-library in the initial milestone.
+The deterministic tooling supports Python 3.11 or later. It uses the standard library plus
+the pinned parsers in `requirements.txt`.
 
 Run tests with:
 
