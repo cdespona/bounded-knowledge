@@ -1039,7 +1039,38 @@ def validate_evidence_bundle(document):
     return errors
 
 
-def validate_candidate_envelope(document, evidence_bundle=None):
+CAVEAT_KINDS = {"overreach", "mislabelled-status", "missed-evidence"}
+
+
+def validate_caveats(caveats, prefix, audit_findings=None):
+    """Check a ``caveats`` list; with ``audit_findings`` ({finding id: kind}) each caveat must resolve into it."""
+    if not isinstance(caveats, list) or not caveats:
+        return ["{} must be a non-empty array".format(prefix)]
+    errors = []
+    seen = set()
+    for index, caveat in enumerate(caveats):
+        where = "{}[{}]".format(prefix, index)
+        if not _exact_fields(caveat, {"findingId", "kind", "explanation"}):
+            errors.append("{} must have exactly findingId, kind and explanation".format(where))
+            continue
+        if not isinstance(caveat["findingId"], str) or not REPOSITORY_ID.fullmatch(caveat["findingId"]):
+            errors.append("{}.findingId must be lowercase kebab-case".format(where))
+        if caveat["findingId"] in seen:
+            errors.append("{}.findingId is duplicated".format(where))
+        seen.add(caveat["findingId"])
+        if caveat["kind"] not in CAVEAT_KINDS:
+            errors.append("{}.kind is invalid".format(where))
+        if not _is_non_empty_string(caveat["explanation"]):
+            errors.append("{}.explanation must be non-empty".format(where))
+        if audit_findings is not None:
+            if caveat["findingId"] not in audit_findings:
+                errors.append("{}.findingId does not resolve into audit.json".format(where))
+            elif audit_findings[caveat["findingId"]] != caveat["kind"]:
+                errors.append("{}.kind differs from the audit finding".format(where))
+    return errors
+
+
+def validate_candidate_envelope(document, evidence_bundle=None, audit_findings=None):
     required = {
         "schemaVersion", "repository", "kind", "analyzedCommit", "evidenceBundleId",
         "proposedProfile",
@@ -1090,9 +1121,11 @@ def validate_candidate_envelope(document, evidence_bundle=None):
             "id", "statement", "status", "confidence", "evidence", "counterevidence",
             "analyzedAt",
         }
-        if not _exact_fields(claim, required_claim, {"missingEvidence"}):
+        if not _exact_fields(claim, required_claim, {"missingEvidence", "caveats"}):
             errors.append("{} has invalid fields".format(prefix))
             continue
+        if "caveats" in claim:
+            errors.extend(validate_caveats(claim["caveats"], prefix + ".caveats", audit_findings))
         claim_id = claim["id"]
         if not isinstance(claim_id, str) or not REPOSITORY_ID.fullmatch(claim_id):
             errors.append("{}.id must be lowercase kebab-case".format(prefix))
@@ -1409,9 +1442,11 @@ def _validate_knowledge_evidence(value, prefix):
 
 def _validate_assessment(value, prefix):
     required = {"status", "confidence", "evidence", "counterevidence", "analyzedAt"}
-    if not _exact_fields(value, required, {"missingEvidence"}):
+    if not _exact_fields(value, required, {"missingEvidence", "caveats"}):
         return ["{} has invalid fields".format(prefix)]
     errors = []
+    if "caveats" in value:
+        errors.extend(validate_caveats(value["caveats"], prefix + ".caveats"))
     status = value["status"]
     if not isinstance(status, str) or status not in {"confirmed", "inferred", "unknown"}:
         errors.append("{}.status is invalid".format(prefix))

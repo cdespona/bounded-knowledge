@@ -1,5 +1,7 @@
 """Tests for run folders: init, per-selection survey, skip-on-rerun, stop-on-failure and commit drift."""
 
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -15,8 +17,11 @@ ROOT = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 
 from landscape_core import runs  # noqa: E402
+from landscape_core.audit import downgrade_candidate, finding_kinds, validate_audit, validate_revision  # noqa: E402
+from landscape_core.candidates import validate_candidate  # noqa: E402
+from landscape_core.contracts import validate_caveats  # noqa: E402
 from landscape_core.cli import main  # noqa: E402
-from landscape_core.stages import run_stage  # noqa: E402
+from landscape_core.stages import prepare_stage, run_stage  # noqa: E402
 
 EXAMPLES = ROOT / "examples"
 CREATED_AT = "2026-11-18T10:00:00+01:00"
@@ -28,7 +33,8 @@ args = sys.argv[1:]
 stage = pathlib.Path(args[args.index("-C") + 1])
 agent = args[args.index("--agent") + 1]
 inputs = stage / "inputs"
-if (stage.parent / "FAIL").exists():
+switches = stage.parent
+if (switches / "FAIL").exists() or (switches / ("FAIL-" + agent)).exists():
     print("not json"); sys.exit(0)
 bundles = [json.loads(p.read_text()) for p in sorted(inputs.glob("*.evidence.json"))]
 if agent == "repository-cartographer":
@@ -42,7 +48,42 @@ if agent == "repository-cartographer":
                 "status": "confirmed", "confidence": "high", "analyzedAt": "2026-11-18T10:00:00+01:00",
                 "counterevidence": [], "evidence": [{"repository": bundle["repository"],
                 "commit": bundle["commit"], "path": item["path"], "lines": item["lines"],
-                "observationId": item["observationIds"][0]}]}]}}))
+                "observationId": item["observationIds"][0]}]},
+                {"id": "business-capability", "statement": "The business capability is not stated.",
+                "status": "unknown", "confidence": "low", "analyzedAt": "2026-11-18T10:00:00+01:00",
+                "counterevidence": [], "evidence": [], "missingEvidence": ["An owner statement."]}]}}))
+elif agent == "evidence-auditor":
+    # AUDIT: "finding" reports an overreach on selected-file; "contradict" adds a contradicting location.
+    candidate = json.loads(next(inputs.glob("*.candidate.json")).read_text())
+    claim = candidate["proposedProfile"]["claims"][0]
+    mode = (switches / "AUDIT").read_text().strip() if (switches / "AUDIT").exists() else "none"
+    findings = []
+    if mode in ("finding", "contradict"):
+        findings.append({"id": "selected-file-overreach", "kind": "overreach", "claimId": claim["id"],
+                         "explanation": "The statement says more than the cited lines show."})
+    if mode == "contradict":
+        findings[0]["contradicts"] = claim["evidence"]
+    print(json.dumps({"schemaVersion": 1, "evidenceBundleId": bundles[0]["id"], "findings": findings}))
+elif agent == "candidate-reviser":
+    # REVISE: "apply" narrows the named claim, "decline" declines every finding, "unchanged" says applied but
+    # changes nothing, "touch" also rewrites an unnamed claim, "upgrade" raises an unnamed claim's status.
+    candidate = json.loads(next(inputs.glob("*.candidate.json")).read_text())
+    audit = json.loads((inputs / "audit.json").read_text())
+    mode = (switches / "REVISE").read_text().strip() if (switches / "REVISE").exists() else "apply"
+    claims = {c["id"]: c for c in candidate["proposedProfile"]["claims"]}
+    decisions = []
+    for finding in audit["findings"]:
+        declined = mode == "decline"
+        decisions.append({"findingId": finding["id"], "decision": "declined" if declined else "applied",
+                          "reason": "The bundle cannot settle it." if declined else "Narrowed the statement."})
+        if mode in ("apply", "touch"):
+            claims[finding["claimId"]]["statement"] += " (as far as the cited lines show)"
+    if mode == "touch":
+        claims["business-capability"]["statement"] = "The business capability is orders."
+    if mode == "undecided":
+        decisions = []
+    print(json.dumps({"schemaVersion": 1, "evidenceBundleId": bundles[0]["id"], "decisions": decisions,
+                      "candidate": candidate}))
 elif agent == "questionnaire-curator":
     candidates = [json.loads(p.read_text()) for p in sorted(inputs.glob("*.candidate.json"))]
     links = [{"type": "claim", "claimId": "selected-file", "repository": b["repository"], "commit": b["commit"],
@@ -142,13 +183,29 @@ class RunFixture(unittest.TestCase):
         return Path(runs.init_run(name, self.topology, list(applications), self.sources, runs_dir=self.runs_dir,
                                   created_at=CREATED_AT)["run"])
 
-    def cartographer(self, run, application):
-        prepared = runs.prepare_run_stage(run, "cartographer", application)
+    def stage(self, run, stage, application):
+        """One per-application stage as cartographer.yaml runs it: up to three run/check attempts."""
+        prepared = runs.prepare_run_stage(run, stage, application)
         if prepared["upToDate"]:
-            return prepared, None
-        stage_dir, response = runs.run_stage_dir(run, "cartographer", application)
-        run_stage(stage_dir, response, 30, executable=str(self.fake))
-        return prepared, runs.check_run_stage(run, "cartographer", application)[1]
+            return prepared, []
+        stage_dir, response = runs.run_stage_dir(run, stage, application)
+        errors = ["not run"]
+        while errors and runs.attempts_made(run, stage, application) < runs.MAX_ATTEMPTS:
+            run_stage(stage_dir, response, 30, executable=str(self.fake))
+            runs.record_attempt(run, stage, application)
+            errors = runs.check_run_stage(run, stage, application)[1]
+        return prepared, errors
+
+    def cartographer(self, run, application):
+        """The whole sub-workflow after discovery; returns the cartographer's prepare result and the first errors."""
+        first, errors = self.stage(run, "cartographer", application)
+        for stage in ("auditor", "reviser"):
+            if errors:
+                return first, errors
+            errors = self.stage(run, stage, application)[1]
+        if not errors:
+            runs.downgrade_application(run, application)
+        return first, errors
 
     def survey(self, run):
         for application in runs.run_applications(run)["applications"]:
@@ -286,6 +343,241 @@ class RunSurveyTests(RunFixture):
         self.assertNotEqual(main(["stage", "prepare", "cartographer", "--run", str(run), "--evidence", "x.json"]), 0)
 
 
+class RunAuditTests(RunFixture):
+    """The evidence auditor, reviser and downgrade (#30): cartographer -> audit -> reviser -> downgrade."""
+
+    def setup_application(self, audit="none", revise="apply", application="billing", name="pilot"):
+        run = self.init([application], name=name)
+        loaded = runs.Run(run)
+        runs.discover_application(run, application)
+        folder = loaded.application_dir(application)
+        (folder / "AUDIT").write_text(audit, encoding="utf-8")
+        (folder / "REVISE").write_text(revise, encoding="utf-8")
+        return run, loaded
+
+    def final(self, loaded, application="billing"):
+        document = json.loads(loaded.candidate(application).read_text(encoding="utf-8"))
+        return {claim["id"]: claim for claim in document["proposedProfile"]["claims"]}
+
+    def documents(self, loaded, application="billing"):
+        return runs._audit_documents(loaded, application)  # bundle, cartographer candidate, audit, revision
+
+    def test_without_findings_the_candidate_passes_through_and_every_output_is_stamped(self):
+        run, loaded = self.setup_application()
+        self.assertEqual(self.cartographer(run, "billing")[1], [])
+        original = json.loads(loaded.cartographer_candidate("billing").read_text(encoding="utf-8"))
+        self.assertEqual(json.loads(loaded.candidate("billing").read_text(encoding="utf-8")), original)
+        for path in (loaded.cartographer_candidate("billing"), loaded.audit("billing"), loaded.revision("billing"),
+                     loaded.candidate("billing")):
+            self.assertTrue(path.is_file(), path)
+            self.assertTrue(path.with_name(path.name + ".inputs.sha256").is_file(), path)
+        self.assertEqual(runs.survey_failures(run), {"failed": []})
+        self.assertTrue(runs.downgrade_application(run, "billing")["skipped"])
+
+    def test_an_overreaching_claim_is_revised_and_keeps_its_status(self):
+        run, loaded = self.setup_application("finding", "apply")
+        self.assertEqual(self.cartographer(run, "billing")[1], [])
+        claim = self.final(loaded)["selected-file"]
+        self.assertTrue(claim["statement"].endswith("(as far as the cited lines show)"))
+        self.assertEqual((claim["status"], claim["confidence"]), ("confirmed", "high"))
+        self.assertNotIn("caveats", claim)
+        revision = json.loads(loaded.revision("billing").read_text(encoding="utf-8"))
+        self.assertEqual([item["decision"] for item in revision["decisions"]], ["applied"])
+        self.assertEqual(runs.audit_summary(loaded, "billing")["downgrades"], 0)
+
+    def test_a_declined_finding_downgrades_the_claim_and_leaves_a_caveat_that_resolves_into_the_audit(self):
+        run, loaded = self.setup_application("contradict", "decline")
+        self.assertEqual(self.cartographer(run, "billing")[1], [])
+        claim = self.final(loaded)["selected-file"]
+        self.assertEqual((claim["status"], claim["confidence"]), ("inferred", "medium"))
+        self.assertEqual([(item["findingId"], item["kind"]) for item in claim["caveats"]],
+                         [("selected-file-overreach", "overreach")])
+        self.assertIn("The bundle cannot settle it.", claim["caveats"][0]["explanation"])
+        bundle, _original, audit, _revision = self.documents(loaded)
+        self.assertEqual([item["id"] for item in audit["findings"]], ["selected-file-overreach"])
+        # The contradicting location is also recorded as counterevidence.
+        self.assertEqual(claim["counterevidence"], audit["findings"][0]["contradicts"])
+        summary = runs.audit_summary(loaded, "billing")
+        self.assertEqual((summary["declined"], summary["downgrades"], summary["caveats"]), (1, 1, 1))
+        # A caveat must resolve into audit.json.
+        final = json.loads(loaded.candidate("billing").read_text(encoding="utf-8"))
+        self.assertEqual(validate_candidate(final, bundle, {"selected-file-overreach": "overreach"}), [])
+        errors = validate_candidate(final, bundle, {})
+        self.assertTrue(any("does not resolve into audit.json" in error for error in errors), errors)
+
+    def test_a_finding_applied_without_changing_its_claim_counts_as_unaddressed(self):
+        run, loaded = self.setup_application("finding", "unchanged")
+        self.assertEqual(self.cartographer(run, "billing")[1], [])
+        self.assertEqual(self.final(loaded)["selected-file"]["status"], "inferred")
+        summary = runs.audit_summary(loaded, "billing")
+        self.assertEqual((summary["applied"], summary["unaddressed"], summary["downgrades"]), (1, 1, 1))
+
+    def test_several_unresolved_findings_lower_a_claim_to_unknown_and_never_below(self):
+        run, loaded = self.setup_application("finding", "decline")
+        self.cartographer(run, "billing")
+        bundle, original, audit, revision = self.documents(loaded)
+        for name in ("second-finding", "third-finding"):
+            audit["findings"].append(dict(audit["findings"][0], id=name))
+            revision["decisions"].append({"findingId": name, "decision": "declined", "reason": "No."})
+        final, summary = downgrade_candidate(original, audit, revision)
+        claim = {item["id"]: item for item in final["proposedProfile"]["claims"]}["selected-file"]
+        self.assertEqual((claim["status"], claim["confidence"], summary["downgrades"], summary["caveats"]),
+                         ("unknown", "low", 2, 3))
+        self.assertTrue(claim["missingEvidence"])
+        self.assertEqual(validate_candidate(final, bundle, finding_kinds(audit)), [])
+
+    def test_a_reviser_that_touches_a_claim_no_finding_named_is_rejected(self):
+        run, loaded = self.setup_application("finding", "touch")
+        _prepared, errors = self.cartographer(run, "billing")
+        self.assertTrue(any("business-capability was changed but no applied finding names it" in error
+                            for error in errors), errors)
+        self.assertEqual(runs.attempts_made(run, "reviser", "billing"), runs.MAX_ATTEMPTS)
+        self.assertFalse(loaded.revision("billing").exists())
+        self.assertFalse(loaded.candidate("billing").exists())
+        self.assertEqual(runs.survey_failures(run), {"failed": ["billing"]})
+
+    def test_a_revision_must_decide_every_finding(self):
+        run, _loaded = self.setup_application("finding", "undecided")
+        errors = self.cartographer(run, "billing")[1]
+        self.assertTrue(any("has no decision" in error for error in errors), errors)
+
+    def test_a_revision_may_not_raise_a_status_add_unsupported_claims_or_write_caveats(self):
+        run, loaded = self.setup_application("finding", "apply")
+        self.cartographer(run, "billing")
+        bundle, original, audit, revision = self.documents(loaded)
+        self.assertEqual(validate_revision(revision, original, audit, bundle), [])
+        claims = revision["candidate"]["proposedProfile"]["claims"]
+        by_id = {item["id"]: item for item in claims}
+        by_id["business-capability"]["status"] = "confirmed"
+        by_id["business-capability"]["evidence"] = by_id["selected-file"]["evidence"]
+        errors = validate_revision(revision, original, audit, bundle)
+        self.assertTrue(any("no applied finding names it" in error for error in errors), errors)
+        claims.append(dict(by_id["selected-file"], id="extra-claim"))
+        self.assertTrue(any("extra-claim was added without an applied missed-evidence finding" in error
+                            for error in validate_revision(revision, original, audit, bundle)))
+        claims[0]["caveats"] = [{"findingId": "x", "kind": "overreach", "explanation": "y"}]
+        self.assertTrue(any("only the downgrade writes them" in error
+                            for error in validate_revision(revision, original, audit, bundle)))
+        # Raising the status of a named claim is refused too.
+        run, loaded = self.setup_application("finding", "apply", "order-management", "second")
+        self.cartographer(run, "order-management")
+        bundle, original, audit, revision = self.documents(loaded, "order-management")
+        audit["findings"][0]["claimId"] = "business-capability"
+        revision["candidate"]["proposedProfile"]["claims"][1].update(
+            status="confirmed", evidence=revision["candidate"]["proposedProfile"]["claims"][0]["evidence"])
+        self.assertTrue(any("upgraded" in error for error in validate_revision(revision, original, audit, bundle)))
+
+    def test_a_missed_evidence_finding_lets_the_reviser_add_a_claim_citing_it(self):
+        run, loaded = self.setup_application("finding", "apply")
+        self.cartographer(run, "billing")
+        bundle, original, audit, revision = self.documents(loaded)
+        reference = original["proposedProfile"]["claims"][0]["evidence"][0]
+        audit["findings"] = [{"id": "missed-file", "kind": "missed-evidence", "explanation": "Uncited content.",
+                              "citations": [reference]}]
+        self.assertEqual(validate_audit(audit, original, bundle), [])
+        revision["decisions"] = [{"findingId": "missed-file", "decision": "applied", "reason": "Added a claim."}]
+        added = dict(original["proposedProfile"]["claims"][0], id="added-claim", statement="Also present.")
+        revision["candidate"] = json.loads(json.dumps(original))
+        revision["candidate"]["proposedProfile"]["claims"].append(added)
+        self.assertEqual(validate_revision(revision, original, audit, bundle), [])
+        final, summary = downgrade_candidate(original, audit, revision)
+        self.assertEqual((summary["unaddressed"], summary["downgrades"], summary["unattached"]), (0, 0, []))
+        revision["decisions"][0]["decision"] = "declined"
+        self.assertTrue(validate_revision(revision, original, audit, bundle))  # a declined finding adds nothing
+        revision["candidate"] = json.loads(json.dumps(original))
+        final, summary = downgrade_candidate(original, audit, revision)
+        self.assertEqual((summary["declined"], summary["unattached"]), (1, ["missed-file"]))
+
+    def test_an_audit_must_point_at_real_claims_and_bundle_lines(self):
+        run, loaded = self.setup_application("finding")
+        self.cartographer(run, "billing")
+        bundle, original, audit, _revision = self.documents(loaded)
+        self.assertEqual(validate_audit(audit, original, bundle), [])
+        broken = json.loads(json.dumps(audit))
+        broken["findings"] = [
+            {"id": "a", "kind": "overreach", "explanation": "x", "claimId": "no-such-claim"},
+            {"id": "b", "kind": "overreach", "explanation": "x"},
+            {"id": "c", "kind": "missed-evidence", "explanation": "x", "claimId": "selected-file"},
+            {"id": "d", "kind": "missed-evidence", "explanation": "x", "citations": [
+                {"repository": bundle["repository"], "commit": bundle["commit"], "path": "nowhere.txt",
+                 "lines": "1", "observationId": "0" * 64}]},
+            {"id": "e", "kind": "overreach", "explanation": "x", "claimId": "selected-file", "contradicts": []}]
+        errors = " | ".join(validate_audit(broken, original, bundle))
+        for expected in ("names no claim", "must name a claim", "must cite the bundle", "outside the bundle",
+                         "must be a non-empty array"):
+            self.assertIn(expected, errors)
+        twice = dict(audit, findings=[audit["findings"][0]] * 2)
+        self.assertTrue(any("duplicated" in error for error in validate_audit(twice, original, bundle)))
+
+    def test_an_auditor_that_fails_its_check_fails_the_application_and_stops_the_survey(self):
+        run = self.init()
+        loaded = runs.Run(run)
+        loaded.application_dir("billing").mkdir(parents=True, exist_ok=True)
+        (loaded.application_dir("billing") / "FAIL-evidence-auditor").write_text("", encoding="utf-8")
+        self.assertIsNone(self.survey(run))
+        self.assertEqual(runs.survey_failures(run), {"failed": ["billing"]})
+        self.assertEqual(runs.attempts_made(run, "auditor", "billing"), runs.MAX_ATTEMPTS)
+        self.assertTrue(loaded.cartographer_candidate("billing").is_file())
+        self.assertFalse(loaded.audit("billing").exists())
+        self.assertFalse(loaded.stage_dir("reviser", "billing").exists())  # nothing after the failed stage ran
+        self.assertFalse(loaded.candidate("billing").exists())
+        self.assertFalse(loaded.questionnaire.exists())
+        self.assertTrue(loaded.candidate("order-management").is_file())  # the other application finished
+        self.assertEqual(main(["run", "survey-check", str(run)]), 1)
+
+    def test_check_reports_exhaustion_only_after_three_attempts_and_prepare_resets_the_count(self):
+        run, _loaded = self.setup_application("finding", "touch")
+        self.stage(run, "cartographer", "billing")
+        self.stage(run, "auditor", "billing")
+        runs.prepare_run_stage(run, "reviser", "billing")
+        stage_dir, response = runs.run_stage_dir(run, "reviser", "billing")
+        output = io.StringIO()
+        for attempt in (1, 2, 3):
+            run_stage(stage_dir, response, 30, executable=str(self.fake))
+            runs.record_attempt(run, "reviser", "billing")
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["stage", "check", "reviser", "--run", str(run), "--application", "billing"]), 1)
+            result = json.loads("{" + output.getvalue().rsplit("{", 1)[-1])
+            self.assertEqual((result["attempts"], result["exhausted"]), (attempt, attempt == 3))
+        runs.prepare_run_stage(run, "reviser", "billing")
+        self.assertEqual(runs.attempts_made(run, "reviser", "billing"), 0)
+
+    def test_rerun_hashes_each_stage_input_so_a_changed_candidate_redoes_audit_and_revision(self):
+        run, loaded = self.setup_application("finding", "apply")
+        self.cartographer(run, "billing")
+        for stage in ("cartographer", "auditor", "reviser"):
+            self.assertTrue(runs.prepare_run_stage(run, stage, "billing")["upToDate"], stage)
+        path = loaded.cartographer_candidate("billing")
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["proposedProfile"]["openQuestions"].append("A new question?")
+        path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.assertTrue(runs.prepare_run_stage(run, "cartographer", "billing")["upToDate"])
+        self.assertFalse(runs.prepare_run_stage(run, "auditor", "billing")["upToDate"])
+        self.assertFalse(runs.prepare_run_stage(run, "reviser", "billing")["upToDate"])
+        self.assertEqual(runs.survey_failures(run), {"failed": ["billing"]})
+
+    def test_the_new_stage_folders_hold_their_own_agent_and_inputs_only(self):
+        run, loaded = self.setup_application("finding")
+        self.cartographer(run, "billing")
+        for stage, agent, names in (
+                ("auditor", "evidence-auditor", {"synthetic-kotlin-service.evidence.json",
+                                                 "synthetic-kotlin-service.candidate.json"}),
+                ("reviser", "candidate-reviser", {"synthetic-kotlin-service.evidence.json",
+                                                  "synthetic-kotlin-service.candidate.json", "audit.json"})):
+            folder = loaded.stage_dir(stage, "billing")
+            self.assertEqual([path.name for path in (folder / ".github" / "agents").iterdir()], [agent + ".agent.md"])
+            self.assertEqual({path.name for path in (folder / "inputs").iterdir()}, names)
+        with self.assertRaisesRegex(ValueError, "needs --audit"):
+            prepare_stage("reviser", self.base / "x", [loaded.evidence("billing", "billing-code")],
+                          [loaded.cartographer_candidate("billing")])
+
+    def test_the_review_reports_findings_downgrades_and_caveats_per_application(self):
+        run, loaded = self.setup_application("finding", "decline")
+        self.cartographer(run, "billing")
+        lines = "\n".join(runs.evidence_audit_lines(loaded))
+        self.assertIn("| billing | 1 | 0 | 1 | 0 | 1 | 1 | 0 |", lines)
+
+
 class RunReviewTests(RunFixture):
     def answer(self, run):
         loaded = runs.Run(run)
@@ -341,6 +633,18 @@ class RunReviewTests(RunFixture):
         self.assertEqual(list(drift), ["billing"])
         self.assertEqual(drift["billing"][0]["moved"], "1 commits")
         self.assertEqual(drift["billing"][0]["selection"], "billing-code")
+
+
+class CaveatShapeTests(unittest.TestCase):
+    def test_caveats_have_exactly_three_fields_and_resolve_only_into_known_findings(self):
+        good = [{"findingId": "a-finding", "kind": "overreach", "explanation": "Why."}]
+        self.assertEqual(validate_caveats(good, "caveats"), [])
+        self.assertEqual(validate_caveats(good, "caveats", {"a-finding": "overreach"}), [])
+        self.assertTrue(validate_caveats(good, "caveats", {"a-finding": "missed-evidence"}))
+        self.assertTrue(validate_caveats(good, "caveats", {}))
+        self.assertTrue(validate_caveats([dict(good[0], extra=1)], "caveats"))
+        self.assertTrue(validate_caveats([dict(good[0], kind="doubt")], "caveats"))
+        self.assertTrue(validate_caveats([], "caveats"))
 
 
 class RunManifestTests(unittest.TestCase):

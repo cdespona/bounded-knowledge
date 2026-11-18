@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 
+from .audit import extract_audit, extract_revision, validate_audit
 from .candidates import extract_candidate_response, validate_candidate
 from .catalog_ids import convention_errors
 from .catalog_proposals import extract_catalog_proposal, validate_catalog_proposal
@@ -23,8 +24,10 @@ ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "workflows" / "prompts"
 BUDGETS = ROOT / "workflows" / "stage-budgets.json"
 AGENTS = ROOT / ".github" / "agents"
-STAGE_AGENTS = {"cartographer": "repository-cartographer", "curator-business": "questionnaire-curator",
+STAGE_AGENTS = {"cartographer": "repository-cartographer", "auditor": "evidence-auditor",
+                "reviser": "candidate-reviser", "curator-business": "questionnaire-curator",
                 "synthesis": "catalog-synthesizer"}
+AUDIT_STAGES = {"auditor", "reviser"}
 # Fixed on purpose: read-only view tool, no built-in MCP servers, no temp-dir access, no questions to a human.
 COPILOT_FLAGS = ("--available-tools=view", "--disable-builtin-mcps", "--disallow-temp-dir", "--no-ask-user", "--silent")
 # Anything Copilot (or a sibling agent tool) could load as instructions, agents, prompts, skills, hooks or MCP servers.
@@ -80,13 +83,19 @@ def _shape(bundles, respondent_id, respondent_role):
 
 
 def prepare_stage(stage, output_dir, evidence, candidates=(), answers=None, analyzed_at=None,
-                  respondent_id="technical-lead", respondent_role="technical lead"):
+                  respondent_id="technical-lead", respondent_role="technical lead", audit=None):
     """Stage the inputs and the rendered prompt of one stage under ``output_dir`` and describe them."""
     if stage not in STAGE_AGENTS:
         raise ValueError("unknown stage {}".format(stage))
     bundles = _bundles(evidence)
-    if stage == "cartographer" and len(bundles) != 1:
-        raise ValueError("the cartographer analyzes exactly one evidence bundle")
+    if (stage == "cartographer" or stage in AUDIT_STAGES) and len(bundles) != 1:
+        raise ValueError("the {} works on exactly one evidence bundle".format(stage))
+    if stage in AUDIT_STAGES and len(candidates) != 1:
+        raise ValueError("the {} needs exactly one validated candidate".format(stage))
+    if stage == "reviser" and not audit:
+        raise ValueError("the reviser needs --audit")
+    if stage != "reviser" and audit:
+        raise ValueError("only the reviser takes --audit")
     if stage in {"curator-business", "synthesis"} and not candidates:
         raise ValueError("{} needs a validated candidate for each repository".format(stage))
     if stage == "synthesis" and not (answers and analyzed_at):
@@ -115,6 +124,12 @@ def prepare_stage(stage, output_dir, evidence, candidates=(), answers=None, anal
         name = bundle["repository"] + ".candidate.json"
         (inputs / name).write_text(json.dumps(candidate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         candidate_names.append(name)
+    if audit:
+        audit_document = _load(audit)
+        errors = validate_audit(audit_document, _load(candidates[0]), next(iter(bundles.values())))
+        if errors:
+            raise ValueError("audit is invalid: " + "; ".join(errors[:3]))
+        (inputs / "audit.json").write_text(json.dumps(audit_document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if answers:
         draft = _load(answers)
         errors = validate_questionnaire_draft(draft)
@@ -123,8 +138,9 @@ def prepare_stage(stage, output_dir, evidence, candidates=(), answers=None, anal
         (inputs / "answers.json").write_text(json.dumps(draft, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     refer = lambda names: ", ".join("inputs/" + name for name in sorted(names))  # noqa: E731
     values = {"analyzed_at": analyzed_at or "", "evidence": refer(files.values()), "candidates": refer(candidate_names),
-              "respondent_role": respondent_role, "shape": _shape(bundles, respondent_id, respondent_role)}
-    if stage == "cartographer":
+              "respondent_role": respondent_role, "shape": _shape(bundles, respondent_id, respondent_role),
+              "audit": "inputs/audit.json"}
+    if stage == "cartographer" or stage in AUDIT_STAGES:
         values["evidence"] = next(iter(files.values()))
     prompt = render(stage, values)
     agent = STAGE_AGENTS[stage]
@@ -330,8 +346,11 @@ def usage_totals(stage_dirs):
             "problems": sorted(problems, key=lambda item: item["stageDir"])}
 
 
-def check_stage(stage, response, evidence, answers=None, current=None):
-    """Return (document or None, errors) for a captured response."""
+def check_stage(stage, response, evidence, answers=None, current=None, candidate=None, audit=None):
+    """Return (document or None, errors) for a captured response.
+
+    The auditor and reviser need the cartographer candidate they work on (and, for the reviser, the audit), as
+    loaded documents. A revision's candidate also passes the cartographer's own candidate check."""
     if stage not in STAGE_AGENTS:
         raise ValueError("unknown stage {}".format(stage))
     bundles = _bundles(evidence)
@@ -340,7 +359,19 @@ def check_stage(stage, response, evidence, answers=None, current=None):
             candidate = extract_candidate_response(response)
             bundle = bundles.get(candidate.get("evidenceBundleId")) if isinstance(candidate, dict) else None
             errors = validate_candidate(candidate, bundle) if bundle else ["candidate cites an evidence bundle that was not supplied"]
+            if not errors and any("caveats" in claim for claim in candidate["proposedProfile"]["claims"]
+                                  if isinstance(claim, dict)):
+                errors = ["the cartographer does not write caveats; only the downgrade does"]
             return (candidate if not errors else None), errors
+        if stage in AUDIT_STAGES:
+            bundle = next(iter(bundles.values()))
+            if candidate is None or (stage == "reviser" and audit is None):
+                raise ValueError("{} check needs the candidate{}".format(stage, " and audit" if stage == "reviser" else ""))
+            if stage == "auditor":
+                document, errors = extract_audit(response, candidate, bundle)
+            else:
+                document, errors = extract_revision(response, candidate, audit, bundle)
+            return (document if not errors else None), errors
         if stage == "curator-business":
             draft = assemble_questionnaire([("response", response)])
             scope = {item["evidenceBundleId"] for item in draft["scope"]}

@@ -33,9 +33,11 @@ def extract_candidate_response(response):
     return objects[0]
 
 
-def validate_candidate(candidate, evidence_bundle):
-    """Validate a candidate and its binding to a structurally valid evidence bundle."""
+def validate_candidate(candidate, evidence_bundle, audit_findings=None):
+    """Validate a candidate and its binding to a structurally valid evidence bundle.
+
+    Caveats are shape-checked; they must resolve into the audit only when ``audit_findings`` is given."""
     evidence_errors = validate_evidence_bundle(evidence_bundle)
     if evidence_errors:
         return ["evidence bundle: {}".format(error) for error in evidence_errors]
-    return validate_candidate_envelope(candidate, evidence_bundle)
+    return validate_candidate_envelope(candidate, evidence_bundle, audit_findings)

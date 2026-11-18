@@ -1,6 +1,7 @@
 # First of three workflows chained by a run folder (survey -> human answers -> synthesis -> promotion).
 # Discovers and characterizes every application of the run, then builds the questionnaire and the answer sheet.
-# Stops without a questionnaire, naming the applications, if any cartographer failed; finished outputs are kept.
+# Stops without a questionnaire, naming the applications, if any application failed its cartographer, auditor or
+# reviser stage (invalid after three attempts); finished outputs are kept.
 # Rerunning skips every step whose output exists and whose inputs are unchanged. Run from the repository root.
 workflow:
   name: survey
@@ -35,7 +36,7 @@ agents:
 
   - name: survey_check
     type: script
-    description: Fails and names every application without a valid, up-to-date candidate.
+    description: Fails and names every application without a final, up-to-date candidate.json.
     command: ./tools/landscape
     args: [run, survey-check, "{{ workflow.input.run }}"]
     routes:
@@ -84,7 +85,7 @@ agents:
 for_each:
   - name: per_application
     type: for_each
-    description: One cartographer sub-workflow per application; a failure does not stop the others.
+    description: One cartographer sub-workflow (cartographer, audit, reviser, downgrade) per application; a failure does not stop the others.
     source: applications.output.applications
     as: application
     # Each cartographer is a paid Copilot call.

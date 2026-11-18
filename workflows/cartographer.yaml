@@ -1,9 +1,13 @@
-# One application of a run: discover and select evidence per selection (commits pinned once), then the
-# cartographer stage: prepare, run Copilot, check, retry. `survey.yaml` runs this once per application.
-# Every path comes from the run folder; parsing and validation live in `landscape`. Run from the repository root.
+# One application of a run: discover and select evidence per selection (commits pinned once), then
+#   cartographer -> check -> audit -> check -> reviser -> check -> downgrade   (decision: issue #11)
+# Each model stage is prepare (skipped when its output is fresh), run, check; a failed check retries the run until
+# `stage check` reports `exhausted` (three attempts), which ends the workflow and fails the application. Findings
+# never fail anything: the downgrade turns declined or unaddressed ones into lower statuses and caveats.
+# `survey.yaml` runs this once per application. Every path comes from the run folder; parsing, validation and the
+# downgrade live in `landscape`. Run from the repository root.
 workflow:
   name: cartographer
-  description: Pin and select evidence for one application of a run and produce its validated candidate.
+  description: Pin and select evidence for one application of a run, then produce, audit, revise and downgrade its candidate.
   entry_point: discover
   input:
     run:
@@ -13,10 +17,9 @@ workflow:
       type: string
       description: Application id from the run's run.json.
   limits:
-    # discover and prepare once, then at most three run/check attempts; each run is also capped in AI credits
-    # by stage-budgets.json.
-    max_iterations: 8
-    timeout_seconds: 1800
+    # discover and downgrade once, and per stage one prepare plus at most three run/check attempts.
+    max_iterations: 40
+    timeout_seconds: 5400
 
 agents:
   - name: discover
@@ -25,21 +28,23 @@ agents:
     command: ./tools/landscape
     args: [run, discover, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
     routes:
-      - to: prepare
+      - to: cartographer_prepare
         when: "{{ output.exit_code == 0 }}"
       - to: $end
 
-  - name: prepare
+  - name: cartographer_prepare
     type: script
-    description: Reports upToDate when the candidate exists and its inputs (evidence, prompt, agent, budgets) are unchanged.
+    description: Reports upToDate when the output exists and its inputs (evidence, earlier outputs, prompt, agent, budgets) are unchanged.
     command: ./tools/landscape
     args: [stage, prepare, cartographer, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
     routes:
       - to: $end
-        when: "{{ output.exit_code != 0 or output.upToDate }}"
-      - to: run
+        when: "{{ output.exit_code != 0 }}"
+      - to: auditor_prepare
+        when: "{{ output.upToDate }}"
+      - to: cartographer_run
 
-  - name: run
+  - name: cartographer_run
     type: script
     description: One read-only, credit-capped Copilot invocation; exit 3 means the cap was reached and ends the workflow, any other failure is left for the check to report.
     command: ./tools/landscape
@@ -48,17 +53,98 @@ agents:
     routes:
       - to: $end
         when: "{{ output.exit_code == 3 }}"
-      - to: check
+      - to: cartographer_check
 
-  - name: check
+  - name: cartographer_check
     type: script
+    description: Fails the application, by ending the workflow, once the output is still invalid after three attempts.
     command: ./tools/landscape
     args: [stage, check, cartographer, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
     routes:
-      - to: $end
+      - to: auditor_prepare
         when: "{{ output.exit_code == 0 }}"
-      - to: run
+      - to: $end
+        when: "{{ output.exhausted }}"
+      - to: cartographer_run
+
+  - name: auditor_prepare
+    type: script
+    description: Reports upToDate when the output exists and its inputs (evidence, earlier outputs, prompt, agent, budgets) are unchanged.
+    command: ./tools/landscape
+    args: [stage, prepare, auditor, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
+    routes:
+      - to: $end
+        when: "{{ output.exit_code != 0 }}"
+      - to: reviser_prepare
+        when: "{{ output.upToDate }}"
+      - to: auditor_run
+
+  - name: auditor_run
+    type: script
+    description: One read-only, credit-capped Copilot invocation; exit 3 means the cap was reached and ends the workflow, any other failure is left for the check to report.
+    command: ./tools/landscape
+    args: [stage, run, --run, "{{ workflow.input.run }}", --stage, auditor, --application, "{{ workflow.input.application }}"]
+    timeout: 320
+    routes:
+      - to: $end
+        when: "{{ output.exit_code == 3 }}"
+      - to: auditor_check
+
+  - name: auditor_check
+    type: script
+    description: Fails the application, by ending the workflow, once the output is still invalid after three attempts.
+    command: ./tools/landscape
+    args: [stage, check, auditor, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
+    routes:
+      - to: reviser_prepare
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+        when: "{{ output.exhausted }}"
+      - to: auditor_run
+
+  - name: reviser_prepare
+    type: script
+    description: Reports upToDate when the output exists and its inputs (evidence, earlier outputs, prompt, agent, budgets) are unchanged.
+    command: ./tools/landscape
+    args: [stage, prepare, reviser, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
+    routes:
+      - to: $end
+        when: "{{ output.exit_code != 0 }}"
+      - to: downgrade
+        when: "{{ output.upToDate }}"
+      - to: reviser_run
+
+  - name: reviser_run
+    type: script
+    description: One read-only, credit-capped Copilot invocation; exit 3 means the cap was reached and ends the workflow, any other failure is left for the check to report.
+    command: ./tools/landscape
+    args: [stage, run, --run, "{{ workflow.input.run }}", --stage, reviser, --application, "{{ workflow.input.application }}"]
+    timeout: 320
+    routes:
+      - to: $end
+        when: "{{ output.exit_code == 3 }}"
+      - to: reviser_check
+
+  - name: reviser_check
+    type: script
+    description: Fails the application, by ending the workflow, once the output is still invalid after three attempts.
+    command: ./tools/landscape
+    args: [stage, check, reviser, --run, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
+    routes:
+      - to: downgrade
+        when: "{{ output.exit_code == 0 }}"
+      - to: $end
+        when: "{{ output.exhausted }}"
+      - to: reviser_run
+
+  - name: downgrade
+    type: script
+    description: Deterministic; lowers every declined or unaddressed finding's claim one status step, writes caveats and contradicting counterevidence, and writes candidate.json (the only file the curator reads).
+    command: ./tools/landscape
+    args: [run, downgrade, "{{ workflow.input.run }}", --application, "{{ workflow.input.application }}"]
+    routes:
+      - to: $end
 
 output:
   application: "{{ workflow.input.application }}"
-  valid: "{{ (prepare is defined and prepare.output.upToDate) or (check is defined and check.output.exit_code == 0) }}"
+  valid: "{{ downgrade is defined and downgrade.output.exit_code == 0 }}"
