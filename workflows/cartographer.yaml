@@ -18,7 +18,7 @@ workflow:
       type: string
       description: Where to write the validated candidate.
   limits:
-    # prepare once, then at most three run/check attempts: the only cost limit, because the model runs as a subprocess.
+    # prepare once, then at most three run/check attempts; each run is also capped in AI credits by stage-budgets.json.
     max_iterations: 7
     timeout_seconds: 1800
 
@@ -34,11 +34,13 @@ agents:
 
   - name: run
     type: script
-    description: One read-only Copilot invocation in the staged directory; a failure is left for the check to report.
+    description: One read-only, credit-capped Copilot invocation; exit 3 means the cap was reached and ends the workflow, any other failure is left for the check to report.
     command: ./tools/landscape
     args: [stage, run, "{{ workflow.input.work_dir }}", --output, "{{ workflow.input.work_dir }}/response.txt"]
     timeout: 320
     routes:
+      - to: $end
+        when: "{{ output.exit_code == 3 }}"
       - to: check
 
   - name: check

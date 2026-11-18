@@ -1,0 +1,8 @@
+{
+  "minMaxAiCredits": 30,
+  "stages": {
+    "cartographer": {"maxAiCredits": 60},
+    "curator-business": {"maxAiCredits": 60},
+    "synthesis": {"maxAiCredits": 100}
+  }
+}

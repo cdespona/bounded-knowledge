@@ -19,7 +19,7 @@ from .topology_bindings import infer_bindings, selection_pairs
 from .binding_questions import generate_binding_questions
 from .promotion import build_approval, promote, serialize
 from .catalog_ids import convention_errors
-from .stages import STAGE_AGENTS, check_stage, prepare_stage, run_stage
+from .stages import CAP_EXIT_CODE, STAGE_AGENTS, check_stage, prepare_stage, run_stage, usage_totals
 from .catalog_proposals import extract_catalog_proposal, render_catalog_review, validate_catalog_proposal
 from .questionnaires import answers_template, answers_template_markdown, parse_answers_markdown, assemble_questionnaire, plan_extracted_files, record_answers, consolidate_questionnaire, extract_questionnaire_response, render_questionnaire
 from .contracts import validate_questionnaire_draft
@@ -170,6 +170,10 @@ def build_parser():
     stage_run_parser.add_argument("stage_dir")
     stage_run_parser.add_argument("--output", required=True)
     stage_run_parser.add_argument("--timeout", type=int, default=290)
+    stage_run_parser.add_argument("--max-ai-credits", type=int, help="override the stage budget (minimum 30)")
+    stage_run_parser.add_argument("--model", help="override the stage model")
+    stage_usage_parser = stage_subparsers.add_parser("usage", help="sum the recorded usage of stage directories")
+    stage_usage_parser.add_argument("stage_dirs", nargs="+")
     stage_check_parser = stage_subparsers.add_parser("check", help="extract and validate a captured stage response")
     stage_check_parser.add_argument("stage", choices=sorted(STAGE_AGENTS))
     stage_check_parser.add_argument("--response", required=True)
@@ -401,9 +405,17 @@ def main(argv=None):
                                       args.analyzed_at, args.respondent_id, args.respondent_role))
             return 0
         if args.command == "stage" and args.stage_command == "run":
-            outcome = run_stage(args.stage_dir, args.output, args.timeout)
+            outcome = run_stage(args.stage_dir, args.output, args.timeout, max_ai_credits=args.max_ai_credits,
+                                model=args.model)
             _write_json(outcome)
+            if outcome["capReached"]:
+                print("error: the Copilot credit cap ({}) was reached or the usage report is incomplete; the "
+                      "response is not trusted".format(outcome["usage"]["cap"]), file=sys.stderr)
+                return CAP_EXIT_CODE
             return 0 if outcome["exitCode"] == 0 else 1
+        if args.command == "stage" and args.stage_command == "usage":
+            _write_json(usage_totals(args.stage_dirs))
+            return 0
         if args.command == "stage" and args.stage_command == "check":
             current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None
             document, errors = check_stage(args.stage, Path(args.response).read_text(encoding="utf-8"), args.evidence,
