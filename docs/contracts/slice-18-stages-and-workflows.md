@@ -19,6 +19,19 @@ evidence bundles, not pasted into the prompt by hand.
 Copilot is always started as `copilot -C DIR --agent NAME --available-tools=view --disable-builtin-mcps
 --disallow-temp-dir --no-ask-user --silent --prompt …`, with `DIR` holding only the staged inputs.
 
+Before building that command, `stage run` checks the stage directory and refuses it, without starting Copilot, if:
+
+- it holds any customization file other than its one agent definition: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
+  `.github/copilot-instructions.md`, `*.instructions.md`, `*.prompt.md`, `*.agent.md`, `*.chatmode.md`, MCP
+  configuration (`mcp.json`, `.mcp.json`, `mcp-config.json`), or anything under `.github/{agents,instructions,skills,
+  prompts,chatmodes,hooks,copilot}`, `.copilot`, `.claude`, `.agents`, `.vscode`, `.cursor` or `.gemini`;
+- the agent definition differs byte for byte from the observatory's copy in `.github/agents/`;
+- it is, or contains, a symbolic link;
+- it lies inside a Git repository other than this one, whose own customizations Copilot could load from a parent.
+
+The check only reads names and compares bytes. It replaces the earlier manual review of source-repository
+customizations, which mattered only while Copilot was pointed at source directories.
+
 ## Why Conductor does not call Copilot itself
 
 Conductor's Copilot provider answers every tool permission request with approval and relies on the workflow's `tools:`
