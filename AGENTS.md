@@ -33,8 +33,10 @@ source repositories as writable project modules.
   repositories during discovery.
 - Do not read or persist `.env` files, Terraform state, kubeconfigs, private keys,
   certificates, secret values, generated code, vendor trees, or build output.
-- Inspect source-repository Copilot customizations before granting Copilot CLI access to
-  that directory.
+- Never point Copilot CLI at a source repository. Copilot sees only a stage directory, and
+  `landscape stage run` refuses one that holds any Copilot customization (instructions,
+  agents, prompts, skills, hooks, MCP configuration) other than its unmodified agent file
+  from `.github/agents/`, any symbolic link, or that lies inside another repository.
 - Do not use broad Copilot permissions such as `--allow-all` or `--allow-all-paths`.
 - Keep model-backed analysis read-only. Promotion into the canonical catalog must pass a
   deterministic validator and a human approval gate.

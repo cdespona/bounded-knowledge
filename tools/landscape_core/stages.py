@@ -6,7 +6,8 @@ response deterministically. Nothing here decides what the pipeline does next.
 
 import hashlib
 import json
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -16,6 +17,7 @@ from .catalog_ids import convention_errors
 from .catalog_proposals import extract_catalog_proposal, validate_catalog_proposal
 from .contracts import validate_evidence_bundle, validate_questionnaire_draft
 from .questionnaires import assemble_questionnaire
+from .safety import COPILOT_CONFIGURATION_DIRECTORIES, COPILOT_INSTRUCTION_NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS = ROOT / "workflows" / "prompts"
@@ -24,6 +26,13 @@ STAGE_AGENTS = {"cartographer": "repository-cartographer", "curator-business": "
                 "synthesis": "catalog-synthesizer"}
 # Fixed on purpose: read-only view tool, no built-in MCP servers, no temp-dir access, no questions to a human.
 COPILOT_FLAGS = ("--available-tools=view", "--disable-builtin-mcps", "--disallow-temp-dir", "--no-ask-user", "--silent")
+# Anything Copilot (or a sibling agent tool) could load as instructions, agents, prompts, skills, hooks or MCP servers.
+# Broader than the source-registry list on purpose: a stage directory should hold nothing of the kind but our agent.
+CUSTOMIZATION_DIRECTORIES = tuple(COPILOT_CONFIGURATION_DIRECTORIES) + (
+    ".github/prompts", ".github/chatmodes", ".github/hooks", ".github/copilot", ".copilot", ".claude", ".agents",
+    ".vscode", ".cursor", ".gemini")
+CUSTOMIZATION_NAMES = set(COPILOT_INSTRUCTION_NAMES) | {"mcp.json", ".mcp.json", "mcp-config.json"}
+CUSTOMIZATION_SUFFIXES = (".instructions.md", ".prompt.md", ".agent.md", ".chatmode.md")
 
 
 def render(template, values):
@@ -125,9 +134,62 @@ def prepare_stage(stage, output_dir, evidence, candidates=(), answers=None, anal
             "inputs": sorted(path.name for path in inputs.iterdir())}
 
 
+def _is_customization(relative):
+    path = PurePosixPath(relative)
+    if path.name in CUSTOMIZATION_NAMES or path.name.endswith(CUSTOMIZATION_SUFFIXES):
+        return True
+    if relative == ".github/copilot-instructions.md":
+        return True
+    return any(relative == directory or relative.startswith(directory + "/") for directory in CUSTOMIZATION_DIRECTORIES)
+
+
+def _enclosing_repository(directory):
+    for candidate in (directory, *directory.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def stage_customization_errors(stage_dir):
+    """List what could steer Copilot in a stage directory besides our own, unmodified agent file.
+
+    Copilot only sees the stage directory, so this replaces a manual review of customizations. It reads
+    names and compares bytes; it never interprets the files.
+    """
+    stage_dir = Path(stage_dir)
+    if stage_dir.is_symlink():
+        return ["the stage directory must not be a symbolic link"]
+    stage_dir = stage_dir.resolve()
+    errors = []
+    repository = _enclosing_repository(stage_dir)
+    if repository is not None and repository != ROOT:
+        errors.append("stage directory lies inside another repository ({}), whose customizations Copilot "
+                      "may load".format(repository))
+    allowed = {".github/agents/{}.agent.md".format(agent) for agent in STAGE_AGENTS.values()}
+    for current, directory_names, file_names in os.walk(stage_dir):
+        current_path = Path(current)
+        for name in sorted(directory_names + file_names):
+            path = current_path / name
+            relative = path.relative_to(stage_dir).as_posix()
+            if path.is_symlink():
+                errors.append("symbolic link in the stage directory: {}".format(relative))
+            elif path.is_file() and _is_customization(relative):
+                if relative not in allowed:
+                    errors.append("foreign customization file: {}".format(relative))
+                elif path.read_bytes() != (AGENTS / name).read_bytes():
+                    errors.append("agent file differs from the observatory's copy: {}".format(relative))
+        directory_names[:] = [name for name in directory_names if not (current_path / name).is_symlink()]
+    return sorted(errors)
+
+
 def copilot_command(stage_dir, executable="copilot"):
-    """Build the Copilot invocation for a prepared stage; refuses a directory that was not prepared."""
-    stage_dir = Path(stage_dir).resolve()
+    """Build the Copilot invocation for a prepared stage; refuses a directory that was not prepared or that
+    carries any customization besides its one agent file."""
+    stage_dir = Path(stage_dir)
+    errors = stage_customization_errors(stage_dir)
+    if errors:
+        raise ValueError("{} is not safe to hand to Copilot: {}".format(stage_dir, "; ".join(errors)))
+    stage_dir = stage_dir.resolve()
     prompt_file = stage_dir / "prompt.txt"
     agents = sorted((stage_dir / ".github" / "agents").glob("*.agent.md"))
     if not prompt_file.is_file() or len(agents) != 1 or not (stage_dir / "inputs").is_dir():
