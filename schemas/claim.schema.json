@@ -22,6 +22,20 @@
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
+    "caveats": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["findingId", "kind", "explanation"],
+        "additionalProperties": false,
+        "properties": {
+          "findingId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "kind": { "enum": ["overreach", "mislabelled-status", "missed-evidence"] },
+          "explanation": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "analyzedAt": { "type": "string", "format": "date-time" }
   },
   "$defs": {

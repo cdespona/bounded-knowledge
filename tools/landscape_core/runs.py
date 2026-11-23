@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 
+from .audit import downgrade_candidate, finding_kinds
 from .binding_questions import generate_binding_questions
 from .catalog_ids import convention_errors
 from .catalog_proposals import render_catalog_review, validate_catalog_proposal
@@ -26,7 +27,8 @@ from .git_repository import commit_sha, require_repository_root
 from .questionnaires import answers_template, answers_template_markdown, assemble_questionnaire, \
     parse_answers_markdown, record_answers, render_questionnaire
 from .sources import resolve_source
-from .stages import AGENTS, BUDGETS, PROMPTS, STAGE_AGENTS, check_stage, prepare_stage, usage_totals
+from .candidates import validate_candidate
+from .stages import AGENTS, AUDIT_STAGES, BUDGETS, PROMPTS, STAGE_AGENTS, check_stage, prepare_stage, usage_totals
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNS_DIR = ROOT / "work" / "runs"
@@ -36,6 +38,9 @@ IDENTIFIER = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
 SELECTION_KINDS = {"application", "kubernetes", "terraform"}
 STAMP_SUFFIX = ".inputs.sha256"
+APPLICATION_STAGES = ("cartographer", "auditor", "reviser")  # run in this order, once per application
+MAX_ATTEMPTS = 3  # an application fails when its auditor or reviser output is still invalid after this many runs
+ATTEMPTS_FILE = "attempts"
 
 
 def now():
@@ -168,7 +173,17 @@ class Run:
     def discovery(self, application_id):
         return self.application_dir(application_id) / "discovery.json"
 
+    def cartographer_candidate(self, application_id):
+        return self.application_dir(application_id) / "cartographer-candidate.json"
+
+    def audit(self, application_id):
+        return self.application_dir(application_id) / "audit.json"
+
+    def revision(self, application_id):
+        return self.application_dir(application_id) / "revision.json"
+
     def candidate(self, application_id):
+        """The final candidate (revised and downgraded); the only per-application file the curator reads."""
         return self.application_dir(application_id) / "candidate.json"
 
     def selection_pairs(self):
@@ -188,10 +203,10 @@ class Run:
 
     # Whole set.
     def stage_dir(self, stage, application_id=None):
-        if stage == "cartographer":
+        if stage in APPLICATION_STAGES:
             if application_id is None:
-                raise ValueError("the cartographer stage needs --application")
-            return self.application_dir(application_id) / "cartographer"
+                raise ValueError("the {} stage needs --application".format(stage))
+            return self.application_dir(application_id) / stage
         if application_id is not None:
             raise ValueError("{} covers the whole run; drop --application".format(stage))
         return self.root / {"curator-business": "survey/curator", "synthesis": "synthesis/stage"}[stage]
@@ -348,6 +363,9 @@ def check_run(run_path):
     present = {}
     for application in sorted(run.applications):
         present[application] = {"discovery": run.discovery(application).is_file(),
+                                "cartographerCandidate": run.cartographer_candidate(application).is_file(),
+                                "audit": run.audit(application).is_file(),
+                                "revision": run.revision(application).is_file(),
                                 "candidate": run.candidate(application).is_file()}
     for name in ("questionnaire", "answers", "proposal", "linked_proposal", "review", "approval"):
         present[name] = getattr(run, name).is_file()
@@ -401,11 +419,14 @@ def discover_application(run_path, application):
 
 
 def survey_failures(run_path):
-    """Applications without a validated, up-to-date candidate. The survey stops if any are listed."""
+    """Applications without a final, up-to-date candidate. The survey stops if any are listed.
+
+    Each stage's output is stamped with the digest of its inputs, so an up-to-date final candidate also proves
+    the cartographer, auditor and reviser outputs it was derived from are the current ones."""
     run = Run(run_path)
     failed = []
     for application in sorted(run.applications):
-        inputs, output = stage_inputs(run, "cartographer", application)[1:]
+        inputs, output = downgrade_inputs(run, application)
         if not is_fresh(output, inputs):
             failed.append(application)
     return {"failed": failed}
@@ -417,10 +438,17 @@ def stage_inputs(run, stage, application=None, current=None):
     """Return (prepare kwargs, inputs for the freshness digest, output path) of a model stage in a run."""
     stage_dir = run.stage_dir(stage, application)
     code = [PROMPTS / (stage + ".txt"), AGENTS / (STAGE_AGENTS[stage] + ".agent.md"), BUDGETS]
-    if stage == "cartographer":
+    if stage in APPLICATION_STAGES:
         evidence = [run.evidence(application, run.application_selection(application)["id"])]
-        kwargs = {"evidence": evidence, "analyzed_at": run.created_at}
-        return dict(kwargs, output_dir=stage_dir), evidence + code, run.candidate(application)
+        if stage == "cartographer":
+            kwargs = {"evidence": evidence, "analyzed_at": run.created_at}
+            return dict(kwargs, output_dir=stage_dir), evidence + code, run.cartographer_candidate(application)
+        candidate = [run.cartographer_candidate(application)]
+        if stage == "auditor":
+            return {"evidence": evidence, "candidates": candidate, "output_dir": stage_dir}, \
+                evidence + candidate + code, run.audit(application)
+        return {"evidence": evidence, "candidates": candidate, "audit": run.audit(application),
+                "output_dir": stage_dir}, evidence + candidate + [run.audit(application)] + code, run.revision(application)
     evidence = run.application_evidence()
     candidates = [run.candidate(item) for item in sorted(run.applications)]
     kwargs = {"evidence": evidence, "candidates": candidates, "respondent_id": run.respondent["id"],
@@ -469,11 +497,89 @@ def check_run_stage(run_path, stage, application=None, current=None):
     if not response.is_file():
         return None, ["no captured response at {}".format(response)], output
     current_catalog = _load(current) if current and Path(current).is_file() else None
+    audited = {}
+    if stage in AUDIT_STAGES:
+        audited["candidate"] = _load(run.cartographer_candidate(application))
+        if stage == "reviser":
+            audited["audit"] = _load(run.audit(application))
     document, errors = check_stage(stage, response.read_text(encoding="utf-8"), [str(path) for path in kwargs["evidence"]],
-                                   str(run.answers) if stage == "synthesis" else None, current_catalog)
+                                   str(run.answers) if stage == "synthesis" else None, current_catalog, **audited)
     if document is not None:
         write_with_stamp(output, inputs, document)
     return document, errors, output
+
+
+def record_attempt(run_path, stage, application):
+    """Count one Copilot invocation of a per-application stage; ``prepare`` resets the count with the folder."""
+    stage_dir = Run(run_path).stage_dir(stage, application)
+    marker = stage_dir / ATTEMPTS_FILE
+    count = int(marker.read_text(encoding="utf-8").strip() or 0) + 1 if marker.is_file() else 1
+    marker.write_text("{}\n".format(count), encoding="utf-8")
+    return count
+
+
+def attempts_made(run_path, stage, application):
+    marker = Run(run_path).stage_dir(stage, application) / ATTEMPTS_FILE
+    return int(marker.read_text(encoding="utf-8").strip() or 0) if marker.is_file() else 0
+
+
+# Downgrade: the last deterministic step of an application's cartographer sub-workflow.
+
+def downgrade_inputs(run, application):
+    evidence = run.evidence(application, run.application_selection(application)["id"])
+    return [evidence, run.cartographer_candidate(application), run.audit(application),
+            run.revision(application)], run.candidate(application)
+
+
+def _audit_documents(run, application):
+    missing = [str(path) for path in downgrade_inputs(run, application)[0] if not path.is_file()]
+    if missing:
+        raise ValueError("cannot downgrade {}; missing: {}".format(application, ", ".join(missing)))
+    bundle = _load(run.evidence(application, run.application_selection(application)["id"]))
+    return bundle, _load(run.cartographer_candidate(application)), _load(run.audit(application)), \
+        _load(run.revision(application))
+
+
+def downgrade_application(run_path, application):
+    """Apply the deterministic downgrade to the revised candidate and write the final ``candidate.json``."""
+    run = Run(run_path)
+    inputs, output = downgrade_inputs(run, application)
+    if is_fresh(output, inputs):
+        return {"application": application, "skipped": True, "candidate": str(output)}
+    bundle, original, audit, revision = _audit_documents(run, application)
+    final, summary = downgrade_candidate(original, audit, revision)
+    errors = validate_candidate(final, bundle, finding_kinds(audit))
+    if errors:
+        raise ValueError("downgraded candidate is invalid: " + "; ".join(errors[:3]))
+    write_with_stamp(output, inputs, final)
+    return dict(summary, application=application, skipped=False, candidate=str(output))
+
+
+def audit_summary(run, application):
+    """Findings, decisions, downgrades and caveats of one application, recomputed deterministically; None if absent."""
+    if not all(path.is_file() for path in downgrade_inputs(run, application)[0]):
+        return None
+    _bundle, original, audit, revision = _audit_documents(run, application)
+    return downgrade_candidate(original, audit, revision)[1]
+
+
+def evidence_audit_lines(run):
+    lines = ["", "## Evidence audit", ""]
+    rows = [(application, audit_summary(run, application)) for application in sorted(run.applications)]
+    if not any(summary for _application, summary in rows):
+        return lines + ["No application has an audit."]
+    lines += ["| Application | Findings | Applied | Declined | Applied but unchanged | Downgrades | Caveats | Unattached |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for application, summary in rows:
+        if summary is None:
+            lines.append("| {} | not audited | | | | | | |".format(application))
+        else:
+            lines.append("| {} | {} | {} | {} | {} | {} | {} | {} |".format(
+                application, summary["findings"], summary["applied"], summary["declined"], summary["unaddressed"],
+                summary["downgrades"], summary["caveats"], ", ".join(summary["unattached"]) or "0"))
+    return lines + ["", "Declined and unchanged findings lower the claim one status step and leave a caveat in "
+                    "`survey/<application>/candidate.json`; \"Unattached\" findings name no claim, so nothing was "
+                    "lowered."]
 
 
 # Questionnaire, answers, linking and review.
@@ -603,7 +709,7 @@ def review_run(run_path, catalog=DEFAULT_CATALOG):
     run.review.parent.mkdir(parents=True, exist_ok=True)
     run.review.write_text(render_catalog_review(proposal, current, _load(run.answers)), encoding="utf-8")
     drift = commit_drift(run)
-    stage_dirs = [run.stage_dir("cartographer", item) for item in sorted(run.applications)]
+    stage_dirs = [run.stage_dir(stage, item) for item in sorted(run.applications) for stage in APPLICATION_STAGES]
     stage_dirs += [run.stage_dir("curator-business"), run.stage_dir("synthesis")]
     usage = usage_totals([path for path in stage_dirs if path.is_dir()])
     lines = ["# Run report: {}".format(run.manifest["name"]), "",
@@ -616,6 +722,7 @@ def review_run(run_path, catalog=DEFAULT_CATALOG):
                          "describes the pinned code; analyzing newer code needs a new survey."
                          .format(application, item["selection"], item["repository"], item["moved"],
                                  item["pinned"][:12], item["head"][:12]))
+    lines += evidence_audit_lines(run)
     lines += ["", "## Copilot usage", "", "```json", json.dumps(usage, indent=2, sort_keys=True), "```", ""]
     run.report.write_text("\n".join(lines), encoding="utf-8")
     return {"review": str(run.review), "report": str(run.report), "drift": drift}

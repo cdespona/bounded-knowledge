@@ -165,6 +165,7 @@ def build_parser():
     _run_options(stage_prepare_parser)
     stage_prepare_parser.add_argument("--candidate", nargs="+", default=[])
     stage_prepare_parser.add_argument("--answers")
+    stage_prepare_parser.add_argument("--audit", help="the reviser's audit.json")
     stage_prepare_parser.add_argument("--analyzed-at")
     stage_prepare_parser.add_argument("--respondent-id", default="technical-lead")
     stage_prepare_parser.add_argument("--respondent-role", default="technical lead")
@@ -184,6 +185,8 @@ def build_parser():
     stage_check_parser.add_argument("--response")
     stage_check_parser.add_argument("--evidence", nargs="+")
     stage_check_parser.add_argument("--answers")
+    stage_check_parser.add_argument("--candidate", help="auditor and reviser: the candidate that was audited")
+    stage_check_parser.add_argument("--audit", help="reviser: the audit it answers")
     stage_check_parser.add_argument("--current")
     stage_check_parser.add_argument("--output")
     _run_options(stage_check_parser)
@@ -290,6 +293,10 @@ def build_parser():
     run_discover_parser = run_subparsers.add_parser("discover", help="discover and select evidence for one application")
     run_discover_parser.add_argument("run")
     run_discover_parser.add_argument("--application", required=True, type=_repository_id)
+    run_downgrade_parser = run_subparsers.add_parser(
+        "downgrade", help="write the final candidate.json: lower every declined or unaddressed finding's claim")
+    run_downgrade_parser.add_argument("run")
+    run_downgrade_parser.add_argument("--application", required=True, type=_repository_id)
     run_record_parser = run_subparsers.add_parser("record", help="record the filled answer sheet")
     run_record_parser.add_argument("run")
     run_record_parser.add_argument("--recorded-at")
@@ -324,6 +331,9 @@ def _run_command(args):
         return 0
     if args.run_command == "discover":
         _write_json(runs.discover_application(args.run, args.application))
+        return 0
+    if args.run_command == "downgrade":
+        _write_json(runs.downgrade_application(args.run, args.application))
         return 0
     if args.run_command == "survey-check":
         result = runs.survey_failures(args.run)
@@ -488,14 +498,15 @@ def main(argv=None):
             return 0 if not errors else 1
 
         if args.command == "stage" and args.stage_command == "prepare" and args.run:
-            _exclusive(args, ["output_dir", "evidence", "candidate", "answers", "analyzed_at"])
+            _exclusive(args, ["output_dir", "evidence", "candidate", "answers", "analyzed_at", "audit"])
             _write_json(runs.prepare_run_stage(args.run, args.stage, args.application, getattr(args, "current", None)))
             return 0
         if args.command == "stage" and args.stage_command == "prepare":
             if not (args.output_dir and args.evidence):
                 raise ValueError("stage prepare needs --run, or --output-dir and --evidence")
             _write_json(prepare_stage(args.stage, args.output_dir, args.evidence, args.candidate, args.answers,
-                                      args.analyzed_at, args.respondent_id, args.respondent_role))
+                                      args.analyzed_at, args.respondent_id, args.respondent_role,
+                                      args.audit))
             return 0
         if args.command == "stage" and args.stage_command == "run":
             if args.run:
@@ -507,6 +518,8 @@ def main(argv=None):
                 raise ValueError("stage run needs --run and --stage, or a stage directory and --output")
             outcome = run_stage(args.stage_dir, args.output, args.timeout, max_ai_credits=args.max_ai_credits,
                                 model=args.model)
+            if args.run and args.stage in runs.APPLICATION_STAGES:
+                outcome["attempt"] = runs.record_attempt(args.run, args.stage, args.application)
             _write_json(outcome)
             if outcome["capReached"]:
                 print("error: the Copilot credit cap ({}) was reached or the usage report is incomplete; the "
@@ -517,16 +530,22 @@ def main(argv=None):
             _write_json(usage_totals(args.stage_dirs))
             return 0
         if args.command == "stage" and args.stage_command == "check" and args.run:
-            _exclusive(args, ["response", "evidence", "answers", "output"])
+            _exclusive(args, ["response", "evidence", "answers", "output", "candidate", "audit"])
             document, errors, output = runs.check_run_stage(args.run, args.stage, args.application, args.current)
-            _write_json({"valid": not errors, "errors": errors, "output": str(output) if not errors else None})
+            result = {"valid": not errors, "errors": errors, "output": str(output) if not errors else None}
+            if errors and args.stage in runs.APPLICATION_STAGES:
+                # The workflow routes on this: after MAX_ATTEMPTS invalid outputs the application fails.
+                attempts = runs.attempts_made(args.run, args.stage, args.application)
+                result.update(attempts=attempts, exhausted=attempts >= runs.MAX_ATTEMPTS)
+            _write_json(result)
             return 0 if not errors else 1
         if args.command == "stage" and args.stage_command == "check":
             if not (args.response and args.evidence and args.output):
                 raise ValueError("stage check needs --run, or --response, --evidence and --output")
             current = json.loads(Path(args.current).read_text(encoding="utf-8")) if args.current else None
+            load = lambda path: json.loads(Path(path).read_text(encoding="utf-8")) if path else None  # noqa: E731
             document, errors = check_stage(args.stage, Path(args.response).read_text(encoding="utf-8"), args.evidence,
-                                           args.answers, current)
+                                           args.answers, current, load(args.candidate), load(args.audit))
             if document is not None:
                 _write_json(document, output=args.output)
             _write_json({"valid": not errors, "errors": errors, "output": args.output if not errors else None})

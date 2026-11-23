@@ -2,6 +2,8 @@
   "minMaxAiCredits": 30,
   "stages": {
     "cartographer": {"maxAiCredits": 60},
+    "auditor": {"maxAiCredits": 100, "model": "claude-opus-5.5"},
+    "reviser": {"maxAiCredits": 60},
     "curator-business": {"maxAiCredits": 60},
     "synthesis": {"maxAiCredits": 100}
   }

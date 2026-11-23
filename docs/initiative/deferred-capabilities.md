@@ -221,6 +221,17 @@ Governing contract:
 | `S10-B02` | Executing Terraform, Terragrunt, providers, modules, hooks, generators, or source-owned code | `permanent-boundary` | Discovery remains static, deterministic, non-executing, and read-only |
 | `S10-B03` | Claiming effective resources, deployment, existence, ownership, access, health, security, cost, provenance, or runtime behavior from declarations | `permanent-boundary` | Module and Terragrunt composition remains syntactic evidence with explicit unknowns |
 
+## Run folders and the evidence auditor (issues #26, #30)
+
+Governing contract: [`docs/contracts/slice-20-evidence-auditor.md`](../contracts/slice-20-evidence-auditor.md)
+
+| ID | Capability excluded from the auditor slice | Status | Revisit condition or destination |
+| --- | --- | --- | --- |
+| `S20-D01` | Auditing synthesis output (the catalog proposal) the way candidates are audited | `deferred` | The human digest review is the safeguard today. Revisit when reviewers report accepted catalog entries whose evidence did not support them, or when a promoted catalog is found to contain an unsupported claim that the digest review did not catch (#11) |
+| `S20-D02` | A second audit pass or a model re-judging whether a declined finding is settled | `deferred` | One pass only: a model never decides its own doubt is settled. Revisit only if downgrade counts show the one-pass design loses many claims that a re-audit would have kept |
+| `S20-D03` | Turning audit findings into questionnaire items for humans | `deferred` | Findings never become questionnaire items; `code-answerable` stays manual. Revisit if caveats prove common on claims a technical lead could settle |
+| `S20-D04` | Resolving catalog `caveats` back into a run's `audit.json` when a catalog is validated outside the run | `deferred` | The catalog schema accepts the shape; resolution is enforced per application where `audit.json` exists. Revisit when promotion should carry caveats into the long-lived catalog |
+
 ## Maintenance rule
 
 Every future slice must update this register as part of its completion gate:
