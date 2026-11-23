@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from landscape_core.catalog_proposals import render_catalog_review  # noqa: E402
 from landscape_core.contracts import validate_landscape_catalog  # noqa: E402
-from landscape_core.promotion import build_approval, digest, merge_catalog, promote, review_digest, serialize  # noqa: E402
+from landscape_core.promotion import build_approval, digest, merge_catalog, promote, review_digest, serialize, validate_answer_provenance  # noqa: E402
 from test_catalog_proposals import ANSWERED_AT, answered_draft, load, proposal  # noqa: E402
 
 APPROVED_AT = "2026-10-29T12:00:00+01:00"
@@ -66,6 +66,34 @@ class PromotionTest(unittest.TestCase):
         self.assertEqual(record["approvedBy"], "Technical lead")
         self.assertEqual(record["accepted"]["added"], ["applications/synthetic-java-service-app"])
         self.assertEqual(record["evidenceBundleIds"], [self.bundle["id"]])
+
+    def test_promotion_keeps_the_used_answers_and_points_the_evidence_at_them(self):
+        result = self.promote(self.approval())
+        kept = Path(result["answers"])
+        self.assertEqual(kept.parent, self.promotions / "answers")
+        questions = json.loads(kept.read_text(encoding="utf-8"))["questions"]
+        self.assertEqual([item["id"] for item in questions], ["citation-audit"])
+        written = json.loads(self.catalog.read_text(encoding="utf-8"))
+        locators = [item["locator"] for item in written["applications"][0]["assessment"]["evidence"] if item["kind"] == "curated"]
+        self.assertEqual(locators, ["answers/{}#citation-audit".format(kept.name)])
+        self.assertEqual(validate_answer_provenance(written, self.promotions), [])
+
+    def test_a_reference_that_does_not_resolve_is_rejected(self):
+        result = self.promote(self.approval())
+        written = json.loads(self.catalog.read_text(encoding="utf-8"))
+        kept = Path(result["answers"])
+        original = kept.read_text(encoding="utf-8")
+        kept.write_text(original.replace("Technical lead", "Someone else"), encoding="utf-8")
+        self.assertTrue(any("answerer or time" in error for error in validate_answer_provenance(written, self.promotions)))
+        kept.write_text(original.replace('"citation-audit"', '"other-question"'), encoding="utf-8")
+        self.assertTrue(any("does not hold as answered" in error for error in validate_answer_provenance(written, self.promotions)))
+        kept.unlink()
+        self.assertTrue(any("missing or unreadable" in error for error in validate_answer_provenance(written, self.promotions)))
+        evidence = written["applications"][0]["assessment"]["evidence"]
+        for item in evidence:
+            if item["kind"] == "curated":
+                item["locator"] = "../elsewhere.json#citation-audit"
+        self.assertTrue(any("invalid answer locator" in error for error in validate_answer_provenance(written, self.promotions)))
 
     def test_dry_run_writes_nothing(self):
         result = self.promote(self.approval(), dry_run=True)

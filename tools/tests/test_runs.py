@@ -615,6 +615,22 @@ class RunReviewTests(RunFixture):
         promoted = json.loads(catalog.read_text(encoding="utf-8"))
         self.assertEqual(sorted(item["id"] for item in promoted["applications"]),
                          ["synthetic-java-service-app", "synthetic-kotlin-service-app"])
+        # The answers the change used are kept next to the catalog and every interview evidence points at them.
+        promotions = self.base / "catalog" / "promotions"
+        (record_file,) = promotions.glob("*.json")
+        record = json.loads(record_file.read_text(encoding="utf-8"))
+        kept = promotions / record["answersFile"]
+        self.assertEqual(record["answersFile"], "answers/" + record_file.name)
+        kept_questions = json.loads(kept.read_text(encoding="utf-8"))["questions"]
+        self.assertEqual([item["id"] for item in kept_questions], record["answerIds"])
+        self.assertEqual(len(kept_questions), 1)
+        for application in promoted["applications"]:
+            (interview,) = [item for item in application["assessment"]["evidence"] if item["kind"] == "curated"]
+            self.assertEqual(interview["locator"], "{}#{}".format(record["answersFile"], kept_questions[0]["id"]))
+        self.assertEqual(main(["catalog", "validate", str(catalog), "--promotions", str(promotions)]), 0)
+        # A cleanup that loses the kept answers makes the references unresolved, and the validator says so.
+        kept.unlink()
+        self.assertEqual(main(["catalog", "validate", str(catalog), "--promotions", str(promotions)]), 1)
         # Rerunning synthesis with nothing changed skips every step.
         self.assertTrue(runs.record_run_answers(run)["skipped"])
         self.assertTrue(runs.link_run(run)["skipped"])

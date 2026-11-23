@@ -90,6 +90,27 @@ cartographer, and `--stage` for `stage run`) as an alternative to their explicit
 error. The deterministic steps that combine many lists (`questionnaire bindings`, `catalog link-config`,
 `catalog propose-validate`) are reached through `run questionnaire` and `run link` instead of each taking `--run`.
 
+## Answer provenance on promotion (#27)
+
+`catalog promote` keeps the questionnaire answers the promoted change used, so a cleanup of `work/` cannot lose
+them. The catalog and its promotions directory stay local and untracked while the repository is public.
+
+- The answers go to `<promotions>/answers/<record stem>.json`, next to the promotion record
+  (`<UTC time>-<proposal digest prefix>.json`), which names the file in `answersFile` and the question ids in
+  `answerIds`. The file holds `schemaVersion`, `questionnaireDraftId` and `questions`: the answered questions
+  (with their `answer`: text, answerer, `recordedAt`) that the proposal's interview evidence cites, sorted by id.
+- Interview evidence in the promoted catalog is the existing curated shape (`kind` `curated`, `sourceType`
+  `interview`, `sourceId` the question id, `suppliedBy`, `recordedAt`) with its optional `locator` set to
+  `answers/<record stem>.json#<question id>`. The approved proposal is not edited; locators are added to the merged
+  catalog, and the diff ignores them so that promoting an unchanged proposal stays a no-op.
+- Evidence status rules are unchanged: testimony alone never confirms, and an interview locator proves who said what
+  and when, not that the statement is true.
+- Promotion validates every reference against the file it is about to write and aborts before writing when one does
+  not resolve. `catalog validate CATALOG --promotions DIR` runs the same check later: each locator must be well
+  formed (`answers/<file>.json#<id>`, no path escapes), the file must be readable, the question must be answered in
+  it, and `suppliedBy` and `recordedAt` must match the preserved answer. Evidence without a locator (promoted before
+  this slice) is not checked.
+
 ## Known gaps
 
 - Binding questions are generated without a catalog proposal, so they cannot be paired through bindings
@@ -97,4 +118,4 @@ error. The deterministic steps that combine many lists (`questionnaire bindings`
 - An `application` selection with a subpath other than `.` is refused (no monorepo support).
 - The drift count uses `git rev-list` on the source repository. When a repository is unreachable, the report
   says so instead of failing.
-- Answer provenance on promotion (#27) builds on this layout. The evidence auditor (#30) is slice 20.
+- The evidence auditor (#30) is slice 20.

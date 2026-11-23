@@ -41,5 +41,6 @@ catalog is meant to be versioned.
 
 `catalog/promotions/<UTC time>-<proposal digest prefix>.json` holds the proposal and review
 digests, approver and time, the accepted and retained assertion ids, the catalog digests
-before and after, the questionnaire draft id, and the evidence bundle ids. Interview answers
-and evidence bundles stay in `work/` and are not part of the catalog.
+before and after, the questionnaire draft id, and the evidence bundle ids. Evidence bundles
+stay in `work/`. The interview answers a promotion used are kept next to the record (slice 19, answer
+provenance).

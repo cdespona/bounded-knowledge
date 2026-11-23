@@ -17,7 +17,7 @@ from .evidence import select_evidence
 from .config_links import propose_shared_resource_relationships
 from .topology_bindings import infer_bindings, selection_pairs
 from .binding_questions import generate_binding_questions
-from .promotion import build_approval, promote, serialize
+from .promotion import build_approval, promote, serialize, validate_answer_provenance
 from .catalog_ids import convention_errors
 from .stages import CAP_EXIT_CODE, STAGE_AGENTS, check_stage, prepare_stage, run_stage, usage_totals
 from . import runs
@@ -200,6 +200,7 @@ def build_parser():
         "validate", help="validate a landscape catalog"
     )
     catalog_validate_parser.add_argument("catalog")
+    catalog_validate_parser.add_argument("--promotions", help="promotions directory; also checks that every answer reference resolves")
     catalog_extract_parser = catalog_subparsers.add_parser(
         "extract", help="extract one proposed catalog from a model response"
     )
@@ -491,6 +492,8 @@ def main(argv=None):
         if args.command == "catalog" and args.catalog_command == "validate":
             catalog = json.loads(Path(args.catalog).read_text(encoding="utf-8"))
             errors = validate_landscape_catalog(catalog)
+            if not errors and args.promotions:
+                errors = validate_answer_provenance(catalog, args.promotions)
             _write_json({"valid": not errors, "errors": errors})
             return 0 if not errors else 1
 
